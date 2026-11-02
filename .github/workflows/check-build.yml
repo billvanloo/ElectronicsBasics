@@ -1,0 +1,27 @@
+name: Check build
+
+# GitHub Pages serves this repository straight from main ("Deploy from a branch"),
+# so this workflow only checks that dist/ is up to date and the solver checks pass.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the circuit solver
+        run: node tests/engine.test.mjs
+      - name: Rebuild dist/
+        run: node build.mjs
+      - name: Make sure the committed dist/ matches src/
+        run: git diff --exit-code -- dist || (echo "::error::dist/ is out of date. Run 'node build.mjs' and commit the result." && exit 1)

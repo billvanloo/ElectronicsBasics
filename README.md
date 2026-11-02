@@ -24,7 +24,7 @@ Every tool has an "About this tool" panel at the bottom with teacher notes: what
 
 ## Live site (GitHub Pages)
 
-`.github/workflows/pages.yml` rebuilds `dist/` and publishes it to GitHub Pages every time `main` changes. One-time setup: in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. The site is then at https://billvanloo.github.io/ElectronicsBasics/
+GitHub Pages serves this repository from `main` ("Deploy from a branch"). The top-level `index.html` forwards visitors to `dist/`, so the site opens at https://billvanloo.github.io/ElectronicsBasics/ and each tool lives at `https://billvanloo.github.io/ElectronicsBasics/dist/<file>.html`. Run `node build.mjs` and commit `dist/` after editing anything in `src/`; the "Check build" workflow fails if `dist/` is out of date.
 
 ## Edit and rebuild
 
