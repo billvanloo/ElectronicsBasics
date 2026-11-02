@@ -1,6 +1,6 @@
 # Electrical Circuits Interactives
 
-Seven standalone browser tools for learning about circuits, plus an index page. Each tool is one self-contained HTML file. The files need no server, no accounts and no internet connection.
+Eight standalone browser tools for learning about circuits, plus an index page. Each tool is one self-contained HTML file. The files need no server, no accounts and no internet connection.
 
 ## Put them on your site
 
@@ -8,7 +8,8 @@ Upload everything in `dist/` into one folder on your site:
 
 | File | Tool | Type | Student time |
 | --- | --- | --- | --- |
-| `index.html` | Landing page that links all seven tools | Page | — |
+| `index.html` | Landing page that links all eight tools | Page | — |
+| `electricity-as-water.html` | Electricity as Water | Animation + interactive | 3–5 min |
 | `series-parallel-sorter.html` | Series vs. Parallel Sorter | Interactive | 3–5 min |
 | `remove-a-bulb.html` | Remove a Bulb: Series vs. Parallel | Animation + interactive | about 1 min per circuit |
 | `breadboard-schematic-mapper.html` | Breadboard-to-Schematic Mapper | Interactive | 2–3 min |

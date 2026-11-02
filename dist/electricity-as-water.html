@@ -1,0 +1,1480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ===== Electrical Circuits Interactives: shared styles ===== */
+:root {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #1b2330;
+  --ink-2: #4b5667;
+  --line: #d3d9e1;
+  --accent: #1f66c9;
+  --accent-hover: #1956ab;
+  --accent-ink: #ffffff;
+  --focus: #1f66c9;
+  --ok: #17703a;
+  --ok-bg: #e5f3ea;
+  --bad: #b3261e;
+  --bad-bg: #fbe8e6;
+  --warn: #7f4d00;
+  --warn-bg: #fff2d4;
+  --hl: #7b3fe4;            /* highlight (mapping, selection) */
+  --stage: #ffffff;         /* circuit canvas: always light, like a workbench sheet */
+  --stage-grid: #edf0f4;
+  --stage-ink: #1b2330;
+  --v-high: #d55e00;        /* warm = high potential */
+  --v-mid: #a69c92;
+  --v-low: #0072b2;         /* cool = low potential */
+  --wire-dead: #8c94a0;
+  --dot: #ffd21f;
+  --dot-edge: #3a2f00;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(20 30 50 / .06), 0 4px 14px rgb(20 30 50 / .06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11151b;
+    --surface: #1a2029;
+    --surface-2: #222a35;
+    --ink: #e7ebf1;
+    --ink-2: #a8b2c1;
+    --line: #333e4c;
+    --accent: #5d9eff;
+    --accent-hover: #7fb2ff;
+    --accent-ink: #0a1322;
+    --focus: #7fb2ff;
+    --ok: #74d394;
+    --ok-bg: #16301f;
+    --bad: #ff8f86;
+    --bad-bg: #3a1c1a;
+    --warn: #ffc56b;
+    --warn-bg: #36290f;
+    --hl: #b892ff;
+    --stage: #f7f8fa;
+    --stage-grid: #e9ecf1;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 4px 14px rgb(0 0 0 / .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11151b; --surface: #1a2029; --surface-2: #222a35; --ink: #e7ebf1; --ink-2: #a8b2c1;
+  --line: #333e4c; --accent: #5d9eff; --accent-hover: #7fb2ff; --accent-ink: #0a1322; --focus: #7fb2ff;
+  --ok: #74d394; --ok-bg: #16301f; --bad: #ff8f86; --bad-bg: #3a1c1a; --warn: #ffc56b; --warn-bg: #36290f;
+  --hl: #b892ff; --stage: #f7f8fa; --stage-grid: #e9ecf1;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font);
+}
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .4em; text-wrap: balance; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 .75em; }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ----- Page frame ----- */
+.app { max-width: 1240px; margin: 0 auto; padding: 16px 16px 48px; }
+.app-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: end; justify-content: space-between; margin: 8px 0 16px; }
+.app-head .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+.eyebrow { font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { text-decoration: underline; }
+.head-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+}
+.panel + .panel { margin-top: 16px; }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.stack > * + * { margin-top: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+
+/* ----- Stage (circuit canvas) ----- */
+.stage {
+  background: var(--stage);
+  background-image: radial-gradient(var(--stage-grid) 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px;
+  color: var(--stage-ink);
+  overflow: hidden;
+}
+.stage svg { display: block; width: 100%; height: auto; }
+.stage svg text { pointer-events: none; }
+.stage-title { font-weight: 600; font-size: .95rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* ----- Buttons ----- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.2;
+  transition: background-color .15s, border-color .15s;
+}
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.seg button { min-height: 40px; padding: 6px 14px; border: 0; background: transparent; font-weight: 600; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+
+/* ----- Caption bar ----- */
+.caption {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #10161f; color: #f3f6fa; border-radius: 10px; padding: 10px 14px; min-height: 48px;
+  font-size: 1.02rem;
+}
+.caption .cc { flex: none; font: 700 .7rem/1 var(--font); border: 1.5px solid currentColor; border-radius: 4px; padding: 3px 4px; margin-top: 3px; opacity: .8; }
+.caption-text { flex: 1; }
+.transcript { margin-top: 8px; }
+.transcript ol { margin: 6px 0 0; padding-left: 1.4em; color: var(--ink-2); font-size: .92rem; }
+
+/* ----- Feedback ----- */
+.fb {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+  border: 2px solid; font-size: .98rem;
+}
+.fb-icon { flex: none; width: 24px; height: 24px; }
+.fb strong { display: block; }
+.fb.ok { border-style: solid; border-color: var(--ok); background: var(--ok-bg); }
+.fb.ok strong { color: var(--ok); }
+.fb.bad { border-style: dashed; border-color: var(--bad); background: var(--bad-bg); }
+.fb.bad strong { color: var(--bad); }
+.fb.warn { border-style: double; border-width: 4px; border-color: var(--warn); background: var(--warn-bg); }
+.fb.warn strong { color: var(--warn); }
+.fb.info { border-style: solid; border-width: 1px; border-color: var(--line); background: var(--surface-2); }
+
+/* ----- Predict card ----- */
+.predict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+.predict fieldset { border: 0; margin: 0; padding: 0; }
+.predict legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
+.predict .choices { display: grid; gap: 6px; margin-bottom: 10px; }
+.choice {
+  display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.predict.locked .choice { cursor: default; }
+.compare { display: grid; gap: 6px; grid-template-columns: auto 1fr; margin-top: 10px; font-size: .96rem; }
+.compare dt { font-weight: 700; }
+.compare dd { margin: 0; }
+.tag { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+
+/* ----- Legend ----- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--ink-2); align-items: center; }
+.legend .item { display: inline-flex; gap: 6px; align-items: center; }
+.legend svg { width: 34px; height: 16px; flex: none; }
+.vbar { width: 70px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--v-low), var(--v-mid), var(--v-high)); display: inline-block; }
+
+/* ----- Sliders (native range, styled) ----- */
+.field { display: grid; gap: 4px; }
+.field label, .field .label { font-weight: 600; font-size: .95rem; display: flex; justify-content: space-between; gap: 8px; }
+.field output, .field .val { font-family: var(--mono); font-weight: 600; }
+.field-row { display: flex; gap: 10px; align-items: center; }
+.field-row input[type="number"] { width: 6.5em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+input[type="range"] {
+  --slider-track-size: 8px; --slider-thumb-size: 22px; --slider-progress: 50%;
+  --slider-track-color: var(--line); --slider-fill-color: var(--accent);
+  appearance: none; -webkit-appearance: none; inline-size: 100%; block-size: 40px; margin: 0; padding: 0;
+  border: 0; background: transparent; cursor: pointer; flex: 1;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  block-size: var(--slider-track-size); border: 0; border-radius: 999px;
+  background: linear-gradient(to right, var(--slider-fill-color) var(--slider-progress), var(--slider-track-color) var(--slider-progress));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  border: 3px solid var(--surface); border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]::-moz-range-track { block-size: var(--slider-track-size); border: 0; border-radius: 999px; background: var(--slider-track-color); }
+input[type="range"]::-moz-range-progress { block-size: var(--slider-track-size); border-radius: 999px; background: var(--slider-fill-color); }
+input[type="range"]::-moz-range-thumb {
+  inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size); border: 3px solid var(--surface);
+  border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+
+/* ----- Tables ----- */
+.table-wrap { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: .94rem; }
+table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
+table.data th { font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+table.data td.num, table.data th.num { text-align: right; font-family: var(--mono); }
+table.data input { width: 6em; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; font-family: var(--mono); }
+
+/* ----- Teacher panel ----- */
+details.about { margin-top: 20px; }
+details.about > summary {
+  cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  list-style: none; padding: 0 4px;
+}
+details.about > summary::-webkit-details-marker { display: none; }
+details.about > summary::before { content: "+"; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); font-weight: 700; }
+details.about[open] > summary::before { content: "\2212"; }
+details.about .about-body { padding: 4px 4px 0 36px; color: var(--ink-2); }
+details.about .about-body ul { padding-left: 1.2em; margin: 0 0 .75em; }
+
+.app-foot { margin-top: 28px; font-size: .85rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+
+/* ----- SVG circuit parts (shared) ----- */
+.sym { fill: none; stroke: var(--stage-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sym-fill { fill: var(--stage-ink); stroke: none; }
+.wire { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.lbl { font: 700 13px var(--font); fill: var(--stage-ink); }
+.lbl-sm { font: 600 11px var(--font); fill: #4b5667; }
+.lbl-val { font: 600 12px var(--mono); fill: #4b5667; }
+.vtag rect { fill: #ffffff; stroke: #c9d0da; }
+.vtag text { font: 700 11.5px var(--mono); fill: #1b2330; }
+.dot { fill: var(--dot); stroke: var(--dot-edge); stroke-width: 1.2; }
+.arrowhead { fill: #1b2330; }
+.part-hit { fill: transparent; stroke: none; }
+.focusable { cursor: pointer; outline: none; }
+.focusable:focus-visible .focus-ring, .focusable.is-hl .focus-ring { stroke: var(--hl); stroke-width: 3.5; stroke-dasharray: 7 4; fill: rgb(123 63 228 / .08); }
+.focus-ring { fill: none; stroke: transparent; }
+.open-mark { fill: none; stroke: #b3261e; stroke-width: 2.4; stroke-dasharray: 5 4; }
+.open-label rect { fill: #fff; stroke: #b3261e; stroke-width: 1.6; }
+.open-label text { font: 800 11px var(--font); fill: #b3261e; letter-spacing: .05em; }
+.hatch-dead { stroke-dasharray: 2 6; }
+
+@media (max-width: 600px) {
+  .app { padding: 12px 16px 40px; }
+  .panel { padding: 12px; }
+}
+@media print {
+  .head-tools, .caption, .btn { display: none !important; }
+  .panel { box-shadow: none; }
+}
+
+</style>
+<title>Electricity as Water</title>
+<meta name="description" content="A water-pipe model of a circuit: a pump pushes water around a loop of pipe, just as a battery pushes charge around a circuit. Adjust the voltage and the current and watch the flow change.">
+<style>
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+  .layout > * { min-width: 0; }
+  .layout > .panel + .panel, .layout > .stack > .panel + .panel { margin-top: 0; }
+  @media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .controls { display: grid; gap: 14px; margin-top: 14px; }
+  .fixed { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); cursor: pointer; }
+  .fixed input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+  .fixed small { display: block; color: var(--ink-2); }
+  .readouts { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-top: 12px; }
+  .readout { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); }
+  .readout .k { font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 700; }
+  .readout .w { font-size: .8rem; color: var(--ink-2); }
+  .readout .v { font: 700 1.15rem var(--mono); }
+  table.map td:first-child, table.map th:first-child { font-weight: 600; }
+  .water-lbl { font: 700 13px var(--font); fill: #1b2330; }
+  .water-sm { font: 600 11.5px var(--font); fill: #4b5667; }
+  .bubble { fill: #ffffff; stroke: rgb(10 40 70 / .35); stroke-width: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Electricity as Water</h1>
+      <p class="lede">A circuit works a lot like water in a closed loop of pipe. The pump pushes (voltage), water flows (current), and a narrow pipe holds the flow back (resistance). Adjust the voltage and current and watch the model respond.</p>
+    </div>
+    <div class="head-tools" id="headTools"></div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-labelledby="h-water">
+      <div class="stage-title"><h2 id="h-water" style="margin:0">Water model</h2>
+        <span class="legend"><span class="item"><span class="vbar" aria-hidden="true"></span>warm = higher pressure (voltage)</span></span></div>
+      <div class="stage" id="water"></div>
+      <div class="readouts" id="readouts"></div>
+      <div style="margin-top:12px" id="captions"></div>
+    </section>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-ctl">
+        <h2 id="h-ctl">Controls</h2>
+        <div class="controls" id="controls"></div>
+        <div id="note" style="margin-top:12px"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-pred">
+        <h2 id="h-pred">Predict</h2>
+        <div id="predict"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-sc">
+        <h2 id="h-sc">The same circuit, as a schematic</h2>
+        <div class="stage" id="schem"></div>
+      </section>
+    </div>
+  </main>
+
+  <section class="panel" aria-labelledby="h-map" style="margin-top:16px">
+    <h2 id="h-map">How the model matches the circuit</h2>
+    <div class="table-wrap"><table class="data map">
+      <thead><tr><th>Water model</th><th>Electric circuit</th><th>Unit</th></tr></thead>
+      <tbody>
+        <tr><td>Pump</td><td>Battery or power supply</td><td>&mdash;</td></tr>
+        <tr><td>Pressure difference the pump creates</td><td>Voltage</td><td>volts (V)</td></tr>
+        <tr><td>Flow rate (amount of water passing a point each second)</td><td>Current</td><td>amps (A), milliamps (mA)</td></tr>
+        <tr><td>Narrow pipe that holds back the flow</td><td>Resistor (resistance)</td><td>ohms (&Omega;)</td></tr>
+        <tr><td>Pipes that are always full of water</td><td>Wires, which are always full of charge</td><td>&mdash;</td></tr>
+        <tr><td>Valve</td><td>Switch</td><td>&mdash;</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin:10px 0 0">The pump does not create water; it only pushes the water that is already in the pipes. A battery doesn&rsquo;t create charge either. It pushes the charge that is already in the wires.</p>
+  </section>
+  <div id="about"></div>
+  <footer class="app-foot">
+  <span>Part of <a href="index.html">Electrical Circuits Interactives</a>. Current is shown as conventional current (+ to &minus;).</span>
+  <span>Works offline. No data leaves this page.</span>
+</footer>
+</div>
+<script>
+/* engine.js */
+/* ===== Circuit engine: DC nodal analysis (MNA) =====
+ * parts: array of
+ *   { id, type: 'resistor'|'lamp'|'wire'|'switch'|'ammeter'|'voltmeter', a, b, R?, closed? , removed? }
+ *   { id, type: 'vsource', pos, neg, V, Ilim? }     ideal source; optional current limit (CV/CC bench supply)
+ *   { id, type: 'led', a (anode), b (cathode), Vf?, Rs? }
+ * Result: { V:{node:volts}, I:{id:amps}, P:{id:watts}, mode:{id:'CV'|'CC'}, ok:true }
+ *   I for two-terminal parts = current flowing a -> b through the part.
+ *   I for a vsource = current leaving its + terminal into the circuit.
+ */
+(function (root) {
+  'use strict';
+  const R_WIRE = 1e-4;       // closed switch / wire
+  const R_AMMETER = 2;       // mA-range burden resistance
+  const R_VOLTMETER = 10e6;  // 10 MΩ input
+  const GMIN = 1e-12;
+
+  function lsolve(A, b) {
+    const n = b.length;
+    for (let c = 0; c < n; c++) {
+      let p = c, best = Math.abs(A[c][c]);
+      for (let r = c + 1; r < n; r++) { const v = Math.abs(A[r][c]); if (v > best) { best = v; p = r; } }
+      if (best < 1e-30) continue;
+      if (p !== c) { [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; }
+      for (let r = c + 1; r < n; r++) {
+        const f = A[r][c] / A[c][c];
+        if (!f) continue;
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    const x = new Array(n).fill(0);
+    for (let r = n - 1; r >= 0; r--) {
+      let s = b[r];
+      for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k];
+      x[r] = Math.abs(A[r][r]) < 1e-30 ? 0 : s / A[r][r];
+    }
+    return x;
+  }
+
+  function resistanceOf(p) {
+    switch (p.type) {
+      case 'wire': return R_WIRE;
+      case 'switch': return p.closed ? R_WIRE : null;
+      case 'ammeter': return p.R ?? R_AMMETER;
+      case 'voltmeter': return p.R ?? R_VOLTMETER;
+      case 'resistor': case 'lamp': return p.R;
+      default: return undefined;
+    }
+  }
+
+  function solve(parts, opts = {}) {
+    const active = parts.filter(p => !p.removed);
+    const sources = active.filter(p => p.type === 'vsource');
+    const ground = opts.ground || (sources[0] && sources[0].neg) || 'gnd';
+    const nodes = new Set();
+    for (const p of active) {
+      if (p.type === 'vsource') { nodes.add(p.pos); nodes.add(p.neg); }
+      else { nodes.add(p.a); nodes.add(p.b); }
+    }
+    nodes.delete(ground);
+    const names = [...nodes];
+    const idx = new Map(names.map((n, i) => [n, i]));
+    const N = names.length;
+
+    const ledState = new Map(active.filter(p => p.type === 'led').map(p => [p.id, false]));
+    const ccState = new Map(sources.map(s => [s.id, false]));
+    let result;
+
+    for (let iter = 0; iter < 25; iter++) {
+      const vs = sources.filter(s => !ccState.get(s.id));
+      const M = N + vs.length;
+      const A = Array.from({ length: M }, () => new Array(M).fill(0));
+      const z = new Array(M).fill(0);
+      const ix = n => (n === ground ? -1 : idx.get(n));
+      const stampG = (a, b, g) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) A[i][i] += g;
+        if (j >= 0) A[j][j] += g;
+        if (i >= 0 && j >= 0) { A[i][j] -= g; A[j][i] -= g; }
+      };
+      // current source of value I flowing from node a, through source, into node b (i.e. injected into b)
+      const stampI = (a, b, I) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) z[i] -= I;
+        if (j >= 0) z[j] += I;
+      };
+      for (let k = 0; k < N; k++) A[k][k] += GMIN;
+
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          if (ledState.get(p.id)) { const g = 1 / Rs; stampG(p.a, p.b, g); stampI(p.b, p.a, g * Vf); }
+          else stampG(p.a, p.b, 1e-9);
+          continue;
+        }
+        const R = resistanceOf(p);
+        if (R == null) continue;
+        stampG(p.a, p.b, 1 / Math.max(R, 1e-9));
+      }
+      vs.forEach((s, k) => {
+        const r = N + k, i = ix(s.pos), j = ix(s.neg);
+        if (i >= 0) { A[i][r] += 1; A[r][i] += 1; }
+        if (j >= 0) { A[j][r] -= 1; A[r][j] -= 1; }
+        z[r] = s.V;
+      });
+      for (const s of sources) if (ccState.get(s.id)) stampI(s.neg, s.pos, s.Ilim);
+
+      const x = lsolve(A, z);
+      const V = { [ground]: 0 };
+      names.forEach((n, i) => { V[n] = x[i]; });
+      const I = {}, P = {}, mode = {};
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        const vab = V[p.a] - V[p.b];
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          I[p.id] = ledState.get(p.id) ? (vab - Vf) / Rs : vab * 1e-9;
+        } else {
+          const R = resistanceOf(p);
+          I[p.id] = R == null ? 0 : vab / Math.max(R, 1e-9);
+        }
+        P[p.id] = vab * I[p.id];
+      }
+      vs.forEach((s, k) => { I[s.id] = -x[N + k]; mode[s.id] = 'CV'; });
+      for (const s of sources) if (ccState.get(s.id)) { I[s.id] = s.Ilim; mode[s.id] = 'CC'; }
+      for (const s of sources) P[s.id] = (V[s.pos] - V[s.neg]) * I[s.id];
+      result = { V, I, P, mode, ground, ok: true };
+
+      // update nonlinear states
+      let changed = false;
+      for (const p of active) {
+        if (p.type !== 'led') continue;
+        const on = ledState.get(p.id);
+        const vab = V[p.a] - V[p.b];
+        if (!on && vab > (p.Vf ?? 2.0) + 1e-6) { ledState.set(p.id, true); changed = true; }
+        else if (on && I[p.id] < 0) { ledState.set(p.id, false); changed = true; }
+      }
+      for (const s of sources) {
+        if (s.Ilim == null) continue;
+        const cc = ccState.get(s.id);
+        if (!cc && I[s.id] > s.Ilim + 1e-9) { ccState.set(s.id, true); changed = true; }
+        else if (cc && V[s.pos] - V[s.neg] > s.V + 1e-9) { ccState.set(s.id, false); changed = true; }
+      }
+      if (!changed) break;
+    }
+    return result;
+  }
+
+  const Engine = { solve, R_WIRE, R_AMMETER, R_VOLTMETER };
+  root.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* schem.js */
+/* ===== Schematic renderer: SVG symbols, wires, voltage colors ===== */
+(function (root) {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function el(tag, attrs = {}, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'text') e.textContent = v;
+      else if (k === 'class') e.setAttribute('class', v);
+      else e.setAttribute(k, v);
+    }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  function svg(w, h, opts = {}) {
+    const s = el('svg', { viewBox: `0 0 ${w} ${h}`, role: opts.role || 'img', 'aria-labelledby': opts.labelledby, focusable: 'false' });
+    if (opts.title) { const t = el('title', { id: opts.titleId, text: opts.title }, s); }
+    if (opts.desc) el('desc', { id: opts.descId, text: opts.desc }, s);
+    return s;
+  }
+
+  /* ---- voltage color: low (cool) -> mid (neutral) -> high (warm) ---- */
+  const C_LOW = [0, 114, 178], C_MID = [166, 156, 146], C_HIGH = [213, 94, 0];
+  function mix(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+  function vColor(v, vmax) {
+    if (!(vmax > 0)) return '#8c94a0';
+    const t = Math.max(0, Math.min(1, v / vmax));
+    const c = t < 0.5 ? mix(C_LOW, C_MID, t / 0.5) : mix(C_MID, C_HIGH, (t - 0.5) / 0.5);
+    return `rgb(${c[0]} ${c[1]} ${c[2]})`;
+  }
+
+  /* ---- geometry helpers ---- */
+  function seg(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+    return { L, ang: Math.atan2(dy, dx) * 180 / Math.PI, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
+  }
+  // group placed so local x-axis runs from (x1,y1) to (x2,y2)
+  function placed(parent, x1, y1, x2, y2, cls) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${x1} ${y1}) rotate(${s.ang})`, class: cls }, parent);
+    return { g, L: s.L };
+  }
+
+  function wire(parent, pts, color, opts = {}) {
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    return el('path', { d, class: 'wire' + (opts.cls ? ' ' + opts.cls : ''), stroke: color || '#8c94a0', 'stroke-width': opts.width }, parent);
+  }
+  function junction(parent, x, y, color) {
+    return el('circle', { cx: x, cy: y, r: 5, fill: color || '#1b2330' }, parent);
+  }
+  // leads drawn colored by node voltage, body in ink
+  function leads(g, L, body, ca, cb) {
+    const a = (L - body) / 2;
+    el('path', { d: `M0 0 H${a}`, class: 'wire', stroke: ca || '#8c94a0' }, g);
+    el('path', { d: `M${L - a} 0 H${L}`, class: 'wire', stroke: cb || ca || '#8c94a0' }, g);
+    return a;
+  }
+
+  /* ---- symbols (drawn between two terminal points) ---- */
+  function resistor(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 44, a = leads(g, L, body, o.ca, o.cb);
+    const n = 6, w = body / n, amp = 8;
+    let d = `M${a} 0`;
+    for (let i = 0; i < n; i++) d += ` L${a + w * (i + 0.5)} ${i % 2 ? amp : -amp}`;
+    d += ` L${a + body} 0`;
+    el('path', { d, class: 'sym' }, g);
+    return g;
+  }
+  // battery: (x1,y1) = negative terminal, (x2,y2) = positive terminal
+  function battery(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const cells = o.cells || 2, body = cells * 14 - 6, a = leads(g, L, body, o.cneg, o.cpos);
+    for (let i = 0; i < cells; i++) {
+      const x = a + i * 14;
+      el('path', { d: `M${x} -8 V8`, class: 'sym', 'stroke-width': 4.5 }, g);          // short plate (−)
+      el('path', { d: `M${x + 8} -17 V17`, class: 'sym' }, g);                           // long plate (+)
+    }
+    // + / − marks (kept upright)
+    const s = seg(x1, y1, x2, y2), rad = s.ang * Math.PI / 180;
+    const nx = -Math.sin(rad), ny = Math.cos(rad);
+    const off = o.markSide === 'left' ? -1 : 1;
+    const px = x1 + Math.cos(rad) * (a + body + 6) + nx * 24 * off, py = y1 + Math.sin(rad) * (a + body + 6) + ny * 24 * off;
+    const qx = x1 + Math.cos(rad) * (a - 6) + nx * 24 * off, qy = y1 + Math.sin(rad) * (a - 6) + ny * 24 * off;
+    el('text', { x: px, y: py + 5, class: 'lbl', 'text-anchor': 'middle', text: '+' }, parent);
+    el('text', { x: qx, y: qy + 5, class: 'lbl', 'text-anchor': 'middle', text: '−' }, parent);
+    return g;
+  }
+  function lamp(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 14, a = leads(g, L, 2 * r, o.ca, o.cb), cx = a + r;
+    const glow = el('g', { class: 'lamp-glow', opacity: o.lit ? 1 : 0 }, g);
+    el('circle', { cx, cy: 0, r: r + 5, fill: '#ffe680', opacity: .55 * (o.brightness ?? 1) + .15 }, glow);
+    for (let i = 0; i < 8; i++) {
+      const t = i * Math.PI / 4, r1 = r + 8, r2 = r + 15;
+      el('path', { d: `M${cx + Math.cos(t) * r1} ${Math.sin(t) * r1} L${cx + Math.cos(t) * r2} ${Math.sin(t) * r2}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, glow);
+    }
+    el('circle', { cx, cy: 0, r, class: 'sym', fill: o.lit ? '#fff3b0' : '#ffffff' }, g);
+    const k = r * 0.7071;
+    el('path', { d: `M${cx - k} ${-k} L${cx + k} ${k} M${cx - k} ${k} L${cx + k} ${-k}`, class: 'sym' }, g);
+    return g;
+  }
+  function led(parent, x1, y1, x2, y2, o = {}) {           // anode at (x1,y1)
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 26, a = leads(g, L, body, o.ca, o.cb);
+    if (o.lit) el('circle', { cx: a + 13, cy: 0, r: 22, fill: o.color || '#ff3b30', opacity: .22 }, g);
+    el('path', { d: `M${a} -12 L${a + 22} 0 L${a} 12 Z`, class: 'sym', fill: o.lit ? (o.color || '#ff3b30') : '#fff' }, g);
+    el('path', { d: `M${a + 22} -13 V13 M${a} 0 H${a + 26}`, class: 'sym' }, g);
+    for (const dx of [6, 15]) {
+      el('path', { d: `M${a + dx} -15 l9 -11 M${a + dx + 9} -26 l-6 1 M${a + dx + 9} -26 l-1 6`, class: 'sym', 'stroke-width': 1.8 }, g);
+    }
+    return g;
+  }
+  function sw(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 40, a = leads(g, L, body, o.ca, o.cb);
+    el('circle', { cx: a, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    el('circle', { cx: a + body, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    const lever = el('path', { d: o.closed ? `M${a} 0 L${a + body - 3} -2` : `M${a} 0 L${a + body - 6} -20`, class: 'sym sw-lever' }, g);
+    if (o.flip) g.setAttribute('transform', g.getAttribute('transform') + ` scale(1 -1)`);
+    return g;
+  }
+  function meter(parent, x1, y1, x2, y2, letter, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 15, a = leads(g, L, 2 * r, o.ca, o.cb);
+    el('circle', { cx: a + r, cy: 0, r, class: 'sym', fill: '#fff' }, g);
+    const s = seg(x1, y1, x2, y2);
+    const t = el('text', { x: a + r, y: 5, class: 'lbl', 'text-anchor': 'middle', 'font-size': 16, text: letter, transform: `rotate(${-s.ang} ${a + r} 0)` }, g);
+    return g;
+  }
+  function label(parent, x, y, text, o = {}) {
+    return el('text', { x, y, class: o.cls || 'lbl', 'text-anchor': o.anchor || 'middle', text }, parent);
+  }
+  function vtag(parent, x, y, text) {
+    const g = el('g', { class: 'vtag' }, parent);
+    const w = 8 + text.length * 7.2;
+    el('rect', { x: x - w / 2, y: y - 10, width: w, height: 20, rx: 5 }, g);
+    el('text', { x, y: y + 4.5, 'text-anchor': 'middle', text }, g);
+    return g;
+  }
+  function openMark(parent, x, y, o = {}) {
+    const g = el('g', { class: 'open-mark-g' }, parent);
+    el('circle', { cx: x, cy: y, r: o.r || 22, class: 'open-mark' }, g);
+    const lg = el('g', { class: 'open-label' }, g);
+    el('rect', { x: x - 24, y: y + (o.r || 22) + 4, width: 48, height: 18, rx: 4 }, lg);
+    el('text', { x, y: y + (o.r || 22) + 17, 'text-anchor': 'middle', text: 'OPEN' }, lg);
+    return g;
+  }
+  function arrowOnPath(parent, x1, y1, x2, y2, o = {}) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, parent);
+    el('path', { d: 'M-6 -6 L5 0 L-6 6 Z', class: 'arrowhead', fill: o.color }, g);
+    return g;
+  }
+  // focus ring rectangle sized to a group's bbox (call after the group is in the document)
+  function addFocusRing(g, pad = 8) {
+    const b = g.getBBox();
+    const r = el('rect', { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad, rx: 8, class: 'focus-ring' });
+    g.insertBefore(r, g.firstChild);
+    return r;
+  }
+
+  /* ---- path utilities (polyline length + point at distance) ---- */
+  function polyline(pts) {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const L = cum[cum.length - 1];
+    function at(s) {
+      s = Math.max(0, Math.min(L, s));
+      let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+      const t = (s - cum[i - 1]) / ((cum[i] - cum[i - 1]) || 1);
+      return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
+    }
+    return { pts, L, at };
+  }
+
+  const Schem = { el, svg, vColor, wire, junction, resistor, battery, lamp, led, sw, meter, label, vtag, openMark, arrowOnPath, addFocusRing, polyline, seg, NS };
+  root.Schem = Schem;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* dots.js */
+/* ===== Current-dot animator =====
+ * Conventional current. Every dot moves at the same speed in every tool.
+ * Each dot = the same amount of charge, so more current = dots closer together.
+ * spacing (px) = refSpacing * refCurrent / |I|
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem;
+
+  class DotFlow {
+    constructor(layer, opts = {}) {
+      this.layer = layer;
+      this.speed = opts.speed ?? 70;               // px per second, constant
+      this.refCurrent = opts.refCurrent ?? 0.01;   // A
+      this.refSpacing = opts.refSpacing ?? 70;     // px between dots at refCurrent
+      this.minSpacing = opts.minSpacing ?? 14;
+      this.r = opts.r ?? 4.2;
+      this.paths = [];
+      this.running = false;
+      this.motion = true;
+      this.last = 0;
+      this._tick = this._tick.bind(this);
+    }
+    spacingFor(I) {
+      const a = Math.abs(I);
+      if (a < 1e-7) return null;
+      return Math.max(this.minSpacing, this.refSpacing * this.refCurrent / a);
+    }
+    // pts listed in the direction of positive conventional current
+    add(id, pts, getI) {
+      const pl = S.polyline(pts);
+      const g = S.el('g', { 'data-flow': id, 'aria-hidden': 'true' }, this.layer);
+      const p = { id, pl, getI, g, phase: 0, spacing: this.refSpacing, dots: [], frozen: false };
+      this.paths.push(p);
+      this._layout(p);
+      return p;
+    }
+    clear() { this.paths.forEach(p => p.g.remove()); this.paths = []; }
+    _layout(p) {
+      const I = p.getI();
+      const sp = this.spacingFor(I);
+      p.frozen = sp == null;
+      if (sp != null) p.spacing = sp;
+      p.dir = I < 0 ? -1 : 1;
+      const n = Math.max(1, Math.floor(p.pl.L / p.spacing) + 2);
+      while (p.dots.length < n) p.dots.push(S.el('circle', { r: this.r, class: 'dot' }, p.g));
+      while (p.dots.length > n) p.dots.pop().remove();
+      this._place(p);
+    }
+    _place(p) {
+      const L = p.pl.L, sp = p.spacing;
+      const off = ((p.phase % sp) + sp) % sp;
+      p.dots.forEach((d, k) => {
+        let s = off + (k - 1) * sp;
+        if (p.dir < 0) s = L - s;
+        const vis = s >= 0 && s <= L;
+        const [x, y] = p.pl.at(s);
+        d.setAttribute('cx', x.toFixed(1)); d.setAttribute('cy', y.toFixed(1));
+        d.setAttribute('opacity', vis ? 1 : 0);
+      });
+    }
+    refresh() { this.paths.forEach(p => this._layout(p)); }
+    setMotion(on) { this.motion = on; if (on) this.start(); }
+    start() {
+      if (this.running) return;
+      this.running = true; this.last = performance.now();
+      requestAnimationFrame(this._tick);
+    }
+    stop() { this.running = false; }
+    _tick(now) {
+      if (!this.running) return;
+      const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+      if (this.motion) {
+        for (const p of this.paths) {
+          if (p.frozen || p.paused) continue;
+          p.phase += this.speed * dt;
+          this._place(p);
+        }
+      }
+      if (this.onTick) this.onTick(dt, this.motion);
+      requestAnimationFrame(this._tick);
+    }
+  }
+  root.DotFlow = DotFlow;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* bb.js */
+/* ===== Breadboard renderer (illustrated, photo-style, drawn upright) =====
+ * Numbered rows run down the board. In each row, holes a–e are connected, and f–j are connected.
+ * The two rail columns on each side run the full length (+ red, − blue).
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem, el = S.el;
+  const P = 18;
+  const COLX = { 'L+': 20, 'L-': 38, a: 80, b: 98, c: 116, d: 134, e: 152, f: 188, g: 206, h: 224, i: 242, j: 260, 'R-': 302, 'R+': 320 };
+  const LEFT = 'abcde', RIGHT = 'fghij';
+
+  class Breadboard {
+    constructor(parent, opts = {}) {
+      this.rows = opts.rows || 30;
+      this.ox = opts.x || 0; this.oy = opts.y || 0;
+      this.g = el('g', { class: 'bb', transform: `translate(${this.ox} ${this.oy})` }, parent);
+      this.width = 340; this.height = 34 + (this.rows - 1) * P + 24;
+      this.draw();
+    }
+    hole(row, col) { return [this.ox + COLX[col], this.oy + 34 + (row - 1) * P]; }
+    node(row, col) {
+      if (col.length === 2) return col;                 // rails: 'L+', 'L-', 'R+', 'R-'
+      return row + (LEFT.includes(col) ? 'L' : 'R');
+    }
+    stripHoles(row, side) { return (side === 'L' ? LEFT : RIGHT).split('').map(c => this.hole(row, c)); }
+    draw() {
+      const g = this.g, H = this.height;
+      el('rect', { x: 0, y: 0, width: this.width, height: H, rx: 10, fill: '#f4f2eb', stroke: '#d4cfbf', 'stroke-width': 1.5 }, g);
+      el('rect', { x: 2, y: 2, width: this.width - 4, height: 6, rx: 3, fill: '#ffffff', opacity: .6 }, g);
+      el('rect', { x: 164, y: 14, width: 12, height: H - 28, rx: 3, fill: '#e3dfd3' }, g);
+      // rail stripes
+      const y1 = 20, y2 = H - 14;
+      el('path', { d: `M11 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('path', { d: `M47 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M293 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M329 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('text', { x: 20, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', fill: '#d8342c', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      el('text', { x: 38, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 302, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 320, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      for (const c of LEFT + RIGHT) el('text', { x: COLX[c], y: 20, 'text-anchor': 'middle', class: 'lbl-sm', text: c }, g);
+      const holes = el('g', { fill: '#3d3d3d' }, g);
+      for (let r = 1; r <= this.rows; r++) {
+        const y = 34 + (r - 1) * P;
+        if (r === 1 || r % 5 === 0) {
+          el('text', { x: 62, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+          el('text', { x: 280, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+        }
+        for (const c of LEFT + RIGHT) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+        if ((r - 1) % 6 !== 5) for (const c of ['L+', 'L-', 'R-', 'R+']) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+      }
+    }
+  }
+
+  /* ---- parts drawn on the board (coordinates are absolute points) ---- */
+  const BAND = { 0: '#1a1a1a', 1: '#7b4a1e', 2: '#d3221d', 3: '#f07c00', 4: '#f2c400', 5: '#2e9d3a', 6: '#2a5bd7', 7: '#8a3fd1', 8: '#8a8a8a', 9: '#f5f5f5' };
+  const BAND_NAME = ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'gray', 'white'];
+  function bands(ohms) {
+    let e = 0, v = ohms;
+    while (v >= 100) { v /= 10; e++; }
+    v = Math.round(v);
+    if (v < 10) { v *= 10; e--; }
+    const d1 = Math.floor(v / 10), d2 = v % 10;
+    return { colors: [BAND[d1], BAND[d2], BAND[e], '#c9a43a'], names: [BAND_NAME[d1], BAND_NAME[d2], BAND_NAME[e], 'gold'] };
+  }
+  function legLine(g, a, b, color = '#9aa1a8', w = 2.6) {
+    el('path', { d: `M${a[0]} ${a[1]} L${b[0]} ${b[1]}`, stroke: color, 'stroke-width': w, 'stroke-linecap': 'round', fill: 'none' }, g);
+  }
+  function pin(g, p) { el('rect', { x: p[0] - 3, y: p[1] - 3, width: 6, height: 6, rx: 1, fill: '#7d848c' }, g); }
+
+  function resistor(parent, p1, p2, ohms, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    legLine(g, p1, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -19, y: -6.5, width: 38, height: 13, rx: 6.5, fill: '#e4c895', stroke: '#b69563', 'stroke-width': 1 }, body);
+    el('rect', { x: -15, y: -5.5, width: 30, height: 3, rx: 1.5, fill: '#fff', opacity: .35 }, body);
+    const b = bands(ohms);
+    [-11, -5, 1, 11].forEach((x, i) => el('rect', { x, y: -6.5, width: 3.6, height: 13, fill: b.colors[i] }, body));
+    return g;
+  }
+  function wire(parent, pts, color = '#2e9d3a', o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    let d = '';
+    if (pts.length === 2 || o.straight) d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    else {
+      d = `M${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [px, py] = pts[i - 1], [cx, cy] = pts[i], [nx, ny] = pts[i + 1];
+        const r = 9;
+        const d1 = Math.hypot(cx - px, cy - py), d2 = Math.hypot(nx - cx, ny - cy);
+        const ax = cx + (px - cx) * Math.min(r, d1 / 2) / d1, ay = cy + (py - cy) * Math.min(r, d1 / 2) / d1;
+        const bx = cx + (nx - cx) * Math.min(r, d2 / 2) / d2, by = cy + (ny - cy) * Math.min(r, d2 / 2) / d2;
+        d += ` L${ax} ${ay} Q${cx} ${cy} ${bx} ${by}`;
+      }
+      const l = pts[pts.length - 1]; d += ` L${l[0]} ${l[1]}`;
+    }
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 7.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 5.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'bb-wire-core' }, g);
+    for (const p of [pts[0], pts[pts.length - 1]]) el('circle', { cx: p[0], cy: p[1], r: 3.4, fill: '#7d848c', stroke: 'rgb(0 0 0 / .3)' }, g);
+    return g;
+  }
+  // flexible lead (e.g. battery snap wires) as a smooth curve
+  function lead(parent, a, b, color, o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    const bend = o.bend ?? 40;
+    const d = `M${a[0]} ${a[1]} C${a[0]} ${a[1] + (o.down === false ? -bend : bend)} ${b[0] + (o.bx || 0)} ${b[1] + (o.by ?? -bend)} ${b[0]} ${b[1]}`;
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 6.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 4.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('circle', { cx: b[0], cy: b[1], r: 3.4, fill: '#7d848c' }, g);
+    return g;
+  }
+  function led(parent, anode, cathode, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, anode); pin(g, cathode);
+    const color = o.color || '#e8261c';
+    const s = S.seg(anode[0], anode[1], cathode[0], cathode[1]);
+    legLine(g, anode, [s.mx, s.my]); legLine(g, cathode, [s.mx, s.my]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    if (o.lit) {
+      el('circle', { r: 26, fill: color, opacity: .18 }, body);
+      el('circle', { r: 18, fill: color, opacity: .25 }, body);
+    }
+    // dome seen from above, flat edge on the cathode side (+x)
+    el('path', { d: 'M8 -10.5 A12 12 0 1 0 8 10.5 Z', fill: color, stroke: 'rgb(0 0 0 / .35)', 'stroke-width': 1.2, opacity: o.lit ? 1 : .82 }, body);
+    el('circle', { cx: -3, cy: -3, r: 4, fill: '#fff', opacity: o.lit ? .8 : .45 }, body);
+    // long-leg marker near the anode
+    el('text', { x: anode[0] + (o.plusDx ?? -12), y: anode[1] + 4, class: 'lbl-sm', 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font-size:13px;font-weight:800;fill:#1b2330');
+    return g;
+  }
+  function bulb(parent, p1, p2, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    legLine(g, p1, [s.mx, s.my], '#6d737a', 3); legLine(g, p2, [s.mx, s.my], '#6d737a', 3);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my})` }, g);
+    if (o.lit) {
+      el('circle', { r: 30, fill: '#ffe066', opacity: .3 }, body);
+      for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; el('path', { d: `M${Math.cos(t) * 20} ${Math.sin(t) * 20} L${Math.cos(t) * 27} ${Math.sin(t) * 27}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, body); }
+    }
+    el('circle', { r: 14, fill: o.lit ? '#fff3a8' : '#eef3f7', stroke: '#8a96a3', 'stroke-width': 1.5, opacity: .95 }, body);
+    el('path', { d: 'M-6 3 Q-3 -6 0 3 Q3 -6 6 3', fill: 'none', stroke: o.lit ? '#e07b00' : '#7b6a55', 'stroke-width': 1.8 }, body);
+    el('circle', { cx: -5, cy: -6, r: 3, fill: '#fff', opacity: .7 }, body);
+    return g;
+  }
+  // slide switch over three holes in a line; pins[1] is common. on => common joined to pins[0]
+  function slideSwitch(parent, pins, on, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pins.forEach(p => pin(g, p));
+    const [a, b, c] = pins, s = S.seg(a[0], a[1], c[0], c[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -27, y: -11, width: 54, height: 22, rx: 4, fill: '#2b2f36', stroke: '#111', 'stroke-width': 1 }, body);
+    el('rect', { x: -19, y: -5, width: 38, height: 10, rx: 2, fill: '#15181c' }, body);
+    el('rect', { x: on ? -18 : 2, y: -6.5, width: 16, height: 13, rx: 2.5, fill: '#e6e8eb', stroke: '#9aa1a8', class: 'sw-knob' }, body);
+    return g;
+  }
+  function battery9v(parent, x, y, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    el('rect', { x: x + 6, y: y - 10, width: 14, height: 12, rx: 3, fill: '#c9ccd1', stroke: '#6d737a' }, g);   // + snap (small)
+    el('rect', { x: x + 34, y: y - 12, width: 18, height: 14, rx: 2, fill: '#c9ccd1', stroke: '#6d737a' }, g);  // − snap (hex)
+    el('rect', { x, y, width: 58, height: 92, rx: 6, fill: '#2b2f36', stroke: '#111' }, g);
+    el('rect', { x: x + 4, y: y + 30, width: 50, height: 30, rx: 3, fill: '#e3a21a' }, g);
+    el('text', { x: x + 29, y: y + 51, 'text-anchor': 'middle', text: o.label || '9V' }, g).setAttribute('style', 'font:800 17px system-ui,sans-serif;fill:#1b2330');
+    el('text', { x: x + 13, y: y + 20, 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    el('text', { x: x + 43, y: y + 20, 'text-anchor': 'middle', text: '−' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    return { g, pos: [x + 13, y - 10], neg: [x + 43, y - 12] };
+  }
+  function testPoint(parent, p, label, o = {}) {
+    const g = el('g', { class: 'tp' }, parent);
+    el('circle', { cx: p[0], cy: p[1], r: 7, fill: 'none', stroke: '#7b3fe4', 'stroke-width': 2 }, g);
+    const lx = p[0] + (o.dx ?? 16), ly = p[1] + (o.dy ?? 0);
+    const w = 10 + label.length * 7;
+    el('rect', { x: lx - (o.anchor === 'end' ? w : 0), y: ly - 9, width: w, height: 18, rx: 4, fill: '#fff', stroke: '#7b3fe4', 'stroke-width': 1.2 }, g);
+    el('text', { x: lx + (o.anchor === 'end' ? -w / 2 : w / 2), y: ly + 4, 'text-anchor': 'middle', text: label }, g).setAttribute('style', 'font:700 11px system-ui,sans-serif;fill:#5a2bb0');
+    return g;
+  }
+
+  root.BB = { Breadboard, resistor, wire, lead, led, bulb, slideSwitch, battery9v, testPoint, bands, P, COLX };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* ui.js */
+/* ===== UI kit: DOM helper, captions, predict-then-reveal, feedback, motion, sliders, CSV ===== */
+(function (root) {
+  'use strict';
+
+  function h(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k === 'html') e.innerHTML = v;
+      else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else if (v === true) e.setAttribute(k, '');
+      else e.setAttribute(k, v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return e;
+  }
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* ---- number formatting ---- */
+  function sig(x, n = 3) {
+    if (!isFinite(x)) return '—';
+    if (Math.abs(x) < 1e-12) return '0';
+    x = Number(x.toPrecision(n));
+    const d = Math.max(0, n - 1 - Math.floor(Math.log10(Math.abs(x))));
+    return x.toFixed(Math.min(d, 6));
+  }
+  function fmtV(v, n = 3) { return sig(v, n) + ' V'; }
+  function fmtI(a, n = 3) { if (Math.abs(a) < 1e-7) return '0 mA'; return Math.abs(a) < 1 ? sig(a * 1000, n) + ' mA' : sig(a, n) + ' A'; }
+  function fmtR(r, n = 3) { return r >= 1000 ? sig(r / 1000, n) + ' kΩ' : sig(r, n) + ' Ω'; }
+  function spokenUnits(s) {
+    return s.replace(/kΩ/g, ' kilohms').replace(/Ω/g, ' ohms').replace(/\bmA\b/g, 'milliamps').replace(/\bV\b/g, 'volts').replace(/\bW\b/g, 'watts').replace(/−/g, 'minus ');
+  }
+
+  /* ---- live announcer (polite + assertive) ---- */
+  let politeEl, assertEl;
+  function ensureAnnouncer() {
+    if (politeEl) return;
+    politeEl = h('div', { class: 'sr-only', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    assertEl = h('div', { class: 'sr-only', 'aria-live': 'assertive', 'aria-atomic': 'true' });
+    document.body.append(politeEl, assertEl);
+  }
+  function announce(text, assertive = false) {
+    ensureAnnouncer();
+    const t = assertive ? assertEl : politeEl;
+    t.textContent = '';
+    setTimeout(() => { t.textContent = text; }, 30);
+  }
+
+  /* ---- captions with transcript ---- */
+  class Captioner {
+    constructor(mount, opts = {}) {
+      this.lines = [];
+      this.textEl = h('div', { class: 'caption-text', 'aria-live': 'polite', 'aria-atomic': 'true' }, opts.initial || '');
+      this.el = h('div', { class: 'caption', role: 'region', 'aria-label': 'Captions' }, h('span', { class: 'cc', 'aria-hidden': 'true' }, 'CC'), this.textEl);
+      this.list = h('ol');
+      this.details = h('details', { class: 'transcript' }, h('summary', { class: 'small' }, 'Show transcript'), this.list);
+      mount.append(this.el, this.details);
+      if (opts.initial) this.log(opts.initial);
+    }
+    set(text) {
+      if (this.textEl.textContent === text) return;
+      this.textEl.textContent = text;
+      this.log(text);
+    }
+    log(text) {
+      if (this.lines[this.lines.length - 1] === text) return;
+      this.lines.push(text);
+      this.list.append(h('li', {}, text));
+    }
+    clear() { this.lines = []; this.list.textContent = ''; }
+  }
+
+  /* ---- feedback badge ---- */
+  const ICONS = {
+    ok: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bad: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    warn: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L23 21H1z" fill="currentColor"/><path d="M12 9v5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.5" fill="#fff"/></svg>',
+    info: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M12 11v6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="7.3" r="1.6" fill="#fff"/></svg>'
+  };
+  const FB_WORD = { ok: 'Correct', bad: 'Not quite', warn: 'Safety check', info: 'Note' };
+  function feedback(kind, title, text) {
+    const color = { ok: 'var(--ok)', bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--ink-2)' }[kind];
+    const icon = h('span', { html: ICONS[kind], style: `color:${color};display:inline-flex` });
+    return h('div', { class: 'fb ' + kind, role: kind === 'warn' || kind === 'bad' ? 'alert' : 'status' },
+      icon, h('div', {}, h('strong', {}, title || FB_WORD[kind]), text ? h('span', {}, text) : null));
+  }
+
+  /* ---- predict, then reveal ---- */
+  let predictCount = 0;
+  class Predict {
+    constructor(mount, { question, choices, onLock, lockLabel }) {
+      this.choices = choices;
+      const name = 'predict-' + (++predictCount);
+      this.radios = choices.map((c, i) => h('input', { type: 'radio', name, value: i }));
+      this.lockBtn = h('button', { class: 'btn btn-primary', type: 'button', disabled: true }, lockLabel || 'Lock in prediction');
+      this.result = h('div', { class: 'predict-result' });
+      this.fs = h('fieldset', {}, h('legend', {}, question),
+        h('div', { class: 'choices' }, choices.map((c, i) => h('label', { class: 'choice' }, this.radios[i], h('span', {}, c)))));
+      this.el = h('div', { class: 'predict' }, this.fs, h('div', { class: 'row' }, this.lockBtn), this.result);
+      this.radios.forEach(r => r.addEventListener('change', () => { this.lockBtn.disabled = false; }));
+      this.lockBtn.addEventListener('click', () => {
+        const sel = this.radios.findIndex(r => r.checked);
+        if (sel < 0) return;
+        this.locked = sel;
+        this.radios.forEach(r => { r.disabled = true; });
+        this.el.classList.add('locked');
+        this.lockBtn.hidden = true;
+        this.result.replaceChildren(h('p', { class: 'small muted', style: 'margin:8px 0 0' }, 'Prediction locked: “' + choices[sel] + '”'));
+        announce('Prediction locked: ' + choices[sel]);
+        onLock && onLock(sel);
+      });
+      mount.append(this.el);
+    }
+    reveal(actualIndex, explanation) {
+      const p = this.locked;
+      const match = p === actualIndex;
+      this.result.replaceChildren(h('dl', { class: 'compare' },
+        h('dt', {}, 'You predicted'), h('dd', {}, p == null ? '(no prediction)' : this.choices[p]),
+        h('dt', {}, 'What happened'), h('dd', {}, this.choices[actualIndex]),
+      ), h('p', { class: 'small', style: 'margin:8px 0 0' },
+        h('span', { class: 'tag' }, match ? 'Matches your prediction' : 'Different from your prediction'), ' ', explanation || ''));
+      announce('You predicted ' + (p == null ? 'nothing' : this.choices[p]) + '. What happened: ' + this.choices[actualIndex] + '. ' + (explanation || ''));
+    }
+    reset() {
+      this.locked = undefined;
+      this.radios.forEach(r => { r.disabled = false; r.checked = false; });
+      this.el.classList.remove('locked');
+      this.lockBtn.hidden = false; this.lockBtn.disabled = true;
+      this.result.replaceChildren();
+    }
+  }
+
+  /* ---- motion preference + pause toggle ---- */
+  const mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false, addEventListener() {} };
+  const motion = {
+    reduced: mq.matches,
+    on: !mq.matches,
+    listeners: [],
+    set(v) { this.on = v; this.listeners.forEach(f => f(v)); },
+    onChange(f) { this.listeners.push(f); f(this.on); },
+    button() {
+      const b = h('button', { class: 'btn btn-small', type: 'button', 'aria-pressed': String(!this.on) });
+      const sync = v => { b.setAttribute('aria-pressed', String(!v)); b.textContent = v ? 'Pause motion' : 'Play motion'; };
+      b.addEventListener('click', () => this.set(!this.on));
+      this.onChange(sync);
+      return b;
+    }
+  };
+  mq.addEventListener && mq.addEventListener('change', e => { motion.reduced = e.matches; motion.set(!e.matches); });
+
+  /* ---- slider with linked number box ---- */
+  function syncSlider(input) {
+    const min = +input.min || 0, max = +input.max || 100;
+    input.style.setProperty('--slider-progress', ((+input.value - min) / (max - min) * 100) + '%');
+  }
+  function slider({ id, label, min, max, step, value, unit, format, onInput, values }) {
+    // values: optional discrete list (slider indexes into it)
+    const discrete = Array.isArray(values);
+    const input = h('input', { type: 'range', id, min: discrete ? 0 : min, max: discrete ? values.length - 1 : max, step: discrete ? 1 : step, value: discrete ? Math.max(0, values.indexOf(value)) : value });
+    const out = h('output', { for: id, class: 'val' });
+    const get = () => discrete ? values[+input.value] : +input.value;
+    const fmt = format || (v => v + (unit ? ' ' + unit : ''));
+    const update = (fire = true) => {
+      const v = get();
+      out.textContent = fmt(v);
+      input.setAttribute('aria-valuetext', spokenUnits(fmt(v)));
+      syncSlider(input);
+      if (fire && onInput) onInput(v);
+    };
+    input.addEventListener('input', () => update());
+    const wrap = h('div', { class: 'field' }, h('label', { for: id }, h('span', {}, label), out), input);
+    update(false);
+    return { el: wrap, input, get, set(v) { input.value = discrete ? Math.max(0, values.indexOf(v)) : v; update(false); }, update };
+  }
+
+  /* ---- teacher panel ---- */
+  function about(mount, html) {
+    const d = h('details', { class: 'about' }, h('summary', {}, 'About this tool'), h('div', { class: 'about-body', html }));
+    mount.append(d);
+    return d;
+  }
+
+  /* ---- CSV download ---- */
+  function downloadCSV(filename, rows) {
+    const esc = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = rows.map(r => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: filename });
+    document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ---- SVG focusable part helper: keyboard + pointer activation ---- */
+  function makeFocusable(g, { label, onActivate, onFocus, onBlur, role }) {
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', role || 'button');
+    g.setAttribute('aria-label', label);
+    g.classList.add('focusable');
+    if (onActivate) {
+      g.addEventListener('click', e => onActivate(e));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(e); } });
+    }
+    if (onFocus) { g.addEventListener('focus', onFocus); g.addEventListener('pointerenter', onFocus); }
+    if (onBlur) { g.addEventListener('blur', onBlur); g.addEventListener('pointerleave', onBlur); }
+    return g;
+  }
+
+  /* ---- shuffle ---- */
+  function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  root.UI = { h, $, $$, sig, fmtV, fmtI, fmtR, spokenUnits, announce, Captioner, feedback, Predict, motion, slider, syncSlider, about, downloadCSV, makeFocusable, shuffle };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+  const { h, $, sig, slider, Captioner, Predict, feedback, motion, about, announce, fmtR } = UI;
+  const S = Schem;
+  const VMAX = 12, IMAX = 100;          // volts, milliamps
+  const W = 26;                           // water width in a normal pipe (px)
+  const st = { V: 6, I: 30, fixed: false, Rfixed: null };
+  const R = () => (st.I > 0 ? st.V / (st.I / 1000) : Infinity);   // ohms
+  const valveClosed = () => st.V > 0 && st.I === 0;
+
+  /* ---------- geometry of the loop (in the direction of flow) ---------- */
+  const X0 = 110, X1 = 560, Y0 = 70, Y1 = 300, PUMP = [110, 185], PR = 40;
+  const C0 = 105, C1 = 265, TAPER = 32;                                      // constriction on the right side
+  const loop = [[X0, PUMP[1] - 36], [X0, Y0], [X1, Y0], [X1, Y1], [X0, Y1], [X0, PUMP[1] + 36], [X0, PUMP[1] - 36]];
+  const path = S.polyline(loop);
+  const narrowW = () => {
+    const r = R();
+    if (!isFinite(r) || st.V === 0) return W - 4;
+    const t = Math.max(0, Math.min(1, (Math.log10(r) - 1) / (Math.log10(12000) - 1)));
+    return 22 - t * 19;                                             // 22 px (10 Ω) down to 3 px (12 kΩ)
+  };
+  // distance along the loop where the right side begins
+  const sRight = (PUMP[1] - 36 - Y0) + (X1 - X0);
+  function widthAt(s) {
+    const y = Y0 + (s - sRight);
+    if (s < sRight || s > sRight + (Y1 - Y0)) return W;
+    const n = narrowW();
+    if (y < C0 || y > C1) return W;
+    if (y < C0 + TAPER) return W + (n - W) * (y - C0) / TAPER;
+    if (y > C1 - TAPER) return W + (n - W) * (C1 - y) / TAPER;
+    return n;
+  }
+  // "volume coordinate": equal steps of volume are equal amounts of water,
+  // so markers equally spaced in volume spread out (and speed up) in the narrow pipe
+  let U = [], Utot = 0;
+  function buildVolume() {
+    U = [0];
+    for (let s = 1; s <= Math.ceil(path.L); s++) U.push(U[s - 1] + widthAt(s - 0.5));
+    Utot = U[U.length - 1];
+  }
+  function sAtVolume(u) {
+    u = ((u % Utot) + Utot) % Utot;
+    let lo = 0, hi = U.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (U[m] < u) lo = m; else hi = m; }
+    return lo + (u - U[lo]) / ((U[hi] - U[lo]) || 1);
+  }
+
+  /* ---------- water drawing ---------- */
+  const svg = S.svg(680, 380, { role: 'img' });
+  $('#water').append(svg);
+  const layers = {};
+  ['pipes', 'bubbles', 'top'].forEach(k => { layers[k] = S.el('g', {}, svg); });
+  let bubbles = [], phase = 0, impeller;
+  const LANES = [-0.25, 0.25], SPACING = W * 22;
+  function drawStatic() {
+    const P = layers.pipes; P.replaceChildren();
+    const T = layers.top; T.replaceChildren();
+    const hi = S.vColor(st.V, VMAX), lo = S.vColor(0, VMAX);
+    const pipeD = `M${X0} ${Y0} H${X1} V${Y1} H${X0} Z`;
+    S.el('path', { d: pipeD, fill: 'none', stroke: '#59616c', 'stroke-width': W + 12, 'stroke-linejoin': 'round' }, P);
+    // water: high-pressure side, low-pressure side, gradient through the narrow pipe
+    const defs = S.el('defs', {}, P);
+    const gr = S.el('linearGradient', { id: 'drop', x1: 0, y1: C0, x2: 0, y2: C1, gradientUnits: 'userSpaceOnUse' }, defs);
+    S.el('stop', { offset: '0.15', 'stop-color': hi }, gr); S.el('stop', { offset: '0.85', 'stop-color': lo }, gr);
+    const water = (d, color) => S.el('path', { d, fill: 'none', stroke: color, 'stroke-width': W, 'stroke-linejoin': 'round' }, P);
+    water(`M${X0} ${PUMP[1]} V${Y0} H${X1} V${C0}`, hi);
+    water(`M${X1} ${C0} V${C1}`, 'url(#drop)');
+    water(`M${X1} ${C1} V${Y1} H${X0} V${PUMP[1]}`, lo);
+    // narrow pipe: walls pushed in from both sides
+    const n = narrowW(), half = W / 2, wall = '#59616c';
+    const side = d => S.el('path', { d: `M${X1 + d * half} ${C0} L${X1 + d * n / 2} ${C0 + TAPER} L${X1 + d * n / 2} ${C1 - TAPER} L${X1 + d * half} ${C1} Z`, fill: wall }, P);
+    side(-1); side(1);
+    S.el('text', { x: X1 + 30, y: (C0 + C1) / 2 - 6, class: 'water-lbl', text: 'Narrow pipe' }, T);
+    S.el('text', { x: X1 + 30, y: (C0 + C1) / 2 + 10, class: 'water-sm', text: '(resistor)' }, T);
+    // pump
+    S.el('circle', { cx: PUMP[0], cy: PUMP[1], r: PR, fill: '#eef1f5', stroke: '#59616c', 'stroke-width': 5 }, T);
+    impeller = S.el('g', {}, T);
+    for (let k = 0; k < 5; k++) {
+      const a = k * 72;
+      S.el('path', { d: 'M0 0 C 10 -8, 22 -10, 30 -4', fill: 'none', stroke: '#1f66c9', 'stroke-width': 5, 'stroke-linecap': 'round', transform: `rotate(${a})` }, impeller);
+    }
+    S.el('circle', { cx: 0, cy: 0, r: 7, fill: '#1b2330' }, impeller);
+    const ax = PUMP[0] + 62;
+    S.el('path', { d: `M${ax} ${PUMP[1] + 18} V${PUMP[1] - 18} M${ax - 7} ${PUMP[1] - 8} L${ax} ${PUMP[1] - 20} L${ax + 7} ${PUMP[1] - 8}`, stroke: '#1b2330', 'stroke-width': 3, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, T);
+    S.el('text', { x: ax + 12, y: PUMP[1] - 2, class: 'water-sm', text: 'pushes water' }, T);
+    S.el('text', { x: ax + 12, y: PUMP[1] + 13, class: 'water-sm', text: 'up and around' }, T);
+    S.el('text', { x: PUMP[0] - 50, y: PUMP[1] - 4, class: 'water-lbl', 'text-anchor': 'end', text: 'Pump' }, T);
+    S.el('text', { x: PUMP[0] - 50, y: PUMP[1] + 12, class: 'water-sm', 'text-anchor': 'end', text: '(battery)' }, T);
+    // valve on the top pipe (switch)
+    const vx = 230;
+    S.el('path', { d: `M${vx} ${Y0 - 19} V${Y0 - 34}`, stroke: '#3a4049', 'stroke-width': 4 }, T);
+    S.el('circle', { cx: vx, cy: Y0 - 40, r: 9, fill: 'none', stroke: valveClosed() ? '#b3261e' : '#3a4049', 'stroke-width': 4 }, T);
+    if (valveClosed()) {
+      S.el('rect', { x: vx - 5, y: Y0 - W / 2 - 4, width: 10, height: W + 8, fill: '#b3261e' }, T);
+      S.el('text', { x: vx + 18, y: Y0 - 34, class: 'water-lbl', text: 'Valve closed (switch open)' }, T).setAttribute('style', 'fill:#b3261e');
+    } else S.el('text', { x: vx + 18, y: Y0 - 34, class: 'water-sm', text: 'Valve open (switch closed)' }, T);
+    // pressure gauges
+    const gauge = (x, y, v, label, below) => {
+      const g = S.el('g', {}, T);
+      const gy = below ? y + 48 : y - 48;
+      S.el('path', { d: `M${x} ${y + (below ? W / 2 + 6 : -W / 2 - 6)} V${gy + (below ? -18 : 18)}`, stroke: '#59616c', 'stroke-width': 5 }, g);
+      S.el('circle', { cx: x, cy: gy, r: 20, fill: '#fff', stroke: '#1b2330', 'stroke-width': 2.5 }, g);
+      const a = (-135 + 270 * v / VMAX) * Math.PI / 180;
+      S.el('path', { d: `M${x} ${gy} L${x + Math.sin(a) * 15} ${gy - Math.cos(a) * 15}`, stroke: '#b3261e', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+      S.el('circle', { cx: x, cy: gy, r: 2.5, fill: '#1b2330' }, g);
+      S.vtag(g, x + 66, gy, `${label} ${v.toFixed(1)} V`);
+    };
+    gauge(470, Y0, st.V, 'High side', false);
+    gauge(470, Y1, 0, 'Low side', true);
+    // what is happening, written inside the loop
+    S.el('text', { x: X1 - 34, y: (C0 + C1) / 2 - 6, class: 'water-sm', 'text-anchor': 'end', text: 'Pressure drop across' }, T);
+    S.el('text', { x: X1 - 34, y: (C0 + C1) / 2 + 12, class: 'water-lbl', 'text-anchor': 'end', text: `the narrow pipe: ${st.V.toFixed(1)} V` }, T);
+    S.el('path', { d: `M${X1 - 24} ${C0 + 6} V${C1 - 6} M${X1 - 29} ${C0 + 12} L${X1 - 24} ${C0 + 6} L${X1 - 19} ${C0 + 12} M${X1 - 29} ${C1 - 12} L${X1 - 24} ${C1 - 6} L${X1 - 19} ${C1 - 12}`, stroke: '#4b5667', 'stroke-width': 1.6, fill: 'none' }, T);
+    S.vtag(T, 300, Y1 - 36, `Flow: ${st.I} mA`);
+    svg.setAttribute('aria-label', describe());
+  }
+  function layoutBubbles() {
+    buildVolume();
+    const n = Math.max(1, Math.floor(Utot / SPACING));
+    const need = n * LANES.length;
+    while (bubbles.length < need) bubbles.push(S.el('circle', { r: 4, class: 'bubble' }, layers.bubbles));
+    while (bubbles.length > need) bubbles.pop().remove();
+    placeBubbles();
+  }
+  function placeBubbles() {
+    const n = bubbles.length / LANES.length, step = Utot / n;
+    bubbles.forEach((b, i) => {
+      const k = Math.floor(i / LANES.length), lane = LANES[i % LANES.length];
+      const s = sAtVolume(phase + k * step + (i % LANES.length) * step / 2);
+      const [x, y] = path.at(s), [x2, y2] = path.at(Math.min(path.L, s + 1));
+      const dx = x2 - x, dy = y2 - y, L = Math.hypot(dx, dy) || 1;
+      const off = lane * widthAt(s);
+      b.setAttribute('cx', (x - dy / L * off).toFixed(1));
+      b.setAttribute('cy', (y + dx / L * off).toFixed(1));
+      // hide markers inside the pump body
+      const inPump = Math.hypot(x - PUMP[0], y - PUMP[1]) < PR - 2;
+      b.setAttribute('opacity', inPump ? 0 : 1);
+    });
+  }
+  // speed: volume per second ∝ current (100 mA ≈ 200 px/s in a normal pipe)
+  let angle = 0, last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (motion.on && st.I > 0) {
+      phase += st.I * 2 * W * dt;
+      angle = (angle + st.I * 7 * dt) % 360;
+      placeBubbles();
+    }
+    impeller.setAttribute('transform', `translate(${PUMP[0]} ${PUMP[1]}) rotate(${angle})`);
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- schematic ---------- */
+  const ssvg = S.svg(380, 230, { role: 'img' });
+  $('#schem').append(ssvg);
+  function drawSchem() {
+    ssvg.replaceChildren();
+    const cH = S.vColor(st.V, VMAX), cL = S.vColor(0, VMAX);
+    S.battery(ssvg, 60, 170, 60, 70, { cneg: cL, cpos: cH, markSide: 'left' });
+    S.label(ssvg, 92, 124, st.V.toFixed(1) + ' V', { anchor: 'start' });
+    S.wire(ssvg, [[60, 70], [60, 30], [110, 30]], cH);
+    S.sw(ssvg, 110, 30, 180, 30, { closed: !valveClosed(), ca: cH, cb: cH });
+    S.wire(ssvg, [[180, 30], [205, 30]], cH);
+    S.meter(ssvg, 205, 30, 265, 30, 'A', { ca: cH, cb: cH });
+    S.vtag(ssvg, 235, 62, st.I + ' mA');
+    S.wire(ssvg, [[265, 30], [320, 30], [320, 65]], cH);
+    S.resistor(ssvg, 320, 65, 320, 175, { ca: cH, cb: cL });
+    S.label(ssvg, 300, 116, 'R', { anchor: 'end' });
+    S.label(ssvg, 300, 134, rText(), { anchor: 'end', cls: 'lbl-val' });
+    S.wire(ssvg, [[320, 175], [320, 205], [60, 205], [60, 170]], cL);
+    ssvg.setAttribute('aria-label', `Schematic: a ${st.V.toFixed(1)} volt battery, a ${valveClosed() ? 'open' : 'closed'} switch, an ammeter reading ${st.I} milliamps, and a resistor of ${rText(true)}, in one loop.`);
+  }
+  const rText = spoken => {
+    const r = R();
+    if (st.V === 0 && st.I === 0) return spoken ? 'any value' : '—';
+    if (!isFinite(r)) return spoken ? 'infinite resistance (the circuit is open)' : '∞ (open)';
+    return spoken ? UI.spokenUnits(fmtR(r)) : fmtR(r);
+  };
+
+  /* ---------- readouts, captions, description ---------- */
+  function drawReadouts() {
+    const ro = (k, w, v) => h('div', { class: 'readout' }, h('div', { class: 'k' }, k), h('div', { class: 'w' }, w), h('div', { class: 'v' }, v));
+    $('#readouts').replaceChildren(
+      ro('Voltage', 'pump pressure', st.V.toFixed(1) + ' V'),
+      ro('Current', 'flow rate', st.I + ' mA'),
+      ro('Resistance', 'narrow pipe', rText()),
+      ro('Power', 'V × I', sig(st.V * st.I / 1000, 2) + ' W'));
+  }
+  function describe() {
+    if (st.V === 0) return 'Water model: the pump is off, so there is no pressure difference and the water does not move.';
+    if (valveClosed()) return `Water model: the pump is pushing with ${st.V.toFixed(1)} volts of pressure, but the valve is closed, so no water flows. This is an open switch.`;
+    return `Water model: the pump pushes water up and around the loop with ${st.V.toFixed(1)} volts of pressure. Water flows at ${st.I} milliamps through a narrow pipe of ${rText(true)}, where the pressure drops from high to low. The water speeds up in the narrow pipe and slows down again after it.`;
+  }
+  const cap = new Captioner($('#captions'), { initial: 'The pump pushes water around the loop. Each white marker is a bit of water; the pipes are always full.' });
+  let capTimer;
+  function caption(changed) {
+    clearTimeout(capTimer);
+    capTimer = setTimeout(() => {
+      let t;
+      if (st.V === 0) t = 'The pump is off. With no pressure difference, nothing pushes the water, so the flow is zero.';
+      else if (valveClosed()) t = 'The valve is closed, like an open switch. The pump still pushes, but no water can flow.';
+      else if (st.fixed) t = changed === 'V'
+        ? `Same narrow pipe, ${st.V.toFixed(1)} V of pressure: the flow is now ${st.I} mA. More push through the same pipe means more flow.`
+        : `Same narrow pipe, ${st.I} mA of flow: that takes ${st.V.toFixed(1)} V of pressure.`;
+      else if (changed === 'V') t = `Pressure ${st.V.toFixed(1)} V with the flow held at ${st.I} mA: the narrow pipe became ${R() > lastR ? 'narrower' : 'wider'} (${fmtR(R())}) to hold the flow back.`;
+      else t = `Flow ${st.I} mA with the pressure held at ${st.V.toFixed(1)} V: the narrow pipe became ${R() > lastR ? 'narrower' : 'wider'} (${fmtR(R())}) to let ${R() > lastR ? 'less' : 'more'} water through.`;
+      cap.set(t);
+      lastR = R();
+    }, 350);
+  }
+  let lastR = R();
+
+  /* ---------- controls ---------- */
+  const sV = slider({ id: 'sV', label: 'Voltage (pump pressure)', min: 0, max: VMAX, step: 0.5, value: st.V, format: v => v.toFixed(1) + ' V', onInput: v => setV(v) });
+  const sI = slider({ id: 'sI', label: 'Current (flow rate)', min: 0, max: IMAX, step: 1, value: st.I, format: v => v + ' mA', onInput: v => setI(v) });
+  const fixedBox = h('input', { type: 'checkbox', id: 'fixed' });
+  const fixedLbl = h('label', { class: 'fixed', for: 'fixed' }, fixedBox, h('span', {}, 'Keep the narrow pipe (resistor) the same', h('small', {}, 'Then changing the voltage changes the current, and changing the current changes the voltage: V = I × R.')));
+  $('#controls').append(sV.el, sI.el, fixedLbl);
+  $('#headTools').append(motion.button());
+
+  function note(kind, title, text) { $('#note').replaceChildren(kind ? feedback(kind, title, text) : ''); }
+  function setV(v) {
+    st.V = v;
+    if (st.fixed && isFinite(st.Rfixed)) {
+      let I = Math.round(v / st.Rfixed * 1000);
+      if (I > IMAX) { I = IMAX; st.V = +(IMAX / 1000 * st.Rfixed).toFixed(1); sV.set(st.V); note('info', 'Top of the current range', ` With this pipe, ${IMAX} mA is reached at ${st.V.toFixed(1)} V.`); }
+      st.I = I; sI.set(st.I);
+    }
+    if (st.V === 0) { st.I = 0; sI.set(0); }
+    sI.input.disabled = st.V === 0;
+    update('V');
+  }
+  function setI(i) {
+    if (st.V === 0) { sI.set(0); return; }
+    st.I = i;
+    if (st.fixed && isFinite(st.Rfixed)) {
+      let V = +(i / 1000 * st.Rfixed).toFixed(2);
+      if (V > VMAX) { V = VMAX; st.I = Math.floor(VMAX / st.Rfixed * 1000); sI.set(st.I); note('info', 'Top of the voltage range', ` With this pipe, ${VMAX} V gives ${st.I} mA.`); }
+      st.V = V; sV.set(+V.toFixed(1));
+    }
+    update('I');
+  }
+  fixedBox.addEventListener('change', () => {
+    st.fixed = fixedBox.checked;
+    st.Rfixed = st.fixed ? R() : null;
+    if (st.fixed && !isFinite(st.Rfixed)) note('info', 'The valve is closed', ' With the valve closed (an open switch), no pressure can make water flow. Open it by raising the current first.');
+    else note(null);
+    announce(st.fixed ? `Narrow pipe locked at ${rText(true)}.` : 'Narrow pipe unlocked. It now adjusts to match the voltage and current you set.');
+  });
+
+  /* ---------- predict ---------- */
+  let v0 = null;
+  const predict = new Predict($('#predict'), {
+    question: 'Keep the same narrow pipe and double the pump pressure. The flow (current) will…',
+    choices: ['double', 'be cut in half', 'stay the same'],
+    onLock: () => {
+      st.fixed = false; st.V = 3; st.I = 15; sV.set(3); sI.set(15); sI.input.disabled = false;
+      fixedBox.checked = true; st.fixed = true; st.Rfixed = R();
+      v0 = 3; update();
+      note('info', 'Try it', ' The pipe is now locked at 200 Ω, starting from 3.0 V and 15 mA. Raise the voltage to 6.0 V.');
+    }
+  });
+  function maybeReveal() {
+    if (v0 == null || !st.fixed || st.V < v0 * 2 - 1e-9) return;
+    v0 = null;
+    const k = st.V / 3;
+    predict.reveal(0, `At 3.0 V the flow was 15 mA; at ${st.V.toFixed(1)} V it is ${st.I} mA. The push went up ${k.toFixed(1)} times and so did the flow: through the same pipe, flow is proportional to push. That is Ohm\u2019s law: I = V \u00f7 R.`);
+    note(null);
+  }
+
+  function update(changed) {
+    if (st.fixed && !isFinite(st.Rfixed) && st.I > 0) st.Rfixed = R();
+    drawStatic(); layoutBubbles(); drawSchem(); drawReadouts();
+    if (changed) caption(changed);
+    maybeReveal();
+  }
+  update();
+  requestAnimationFrame(tick);
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> A model for voltage, current and resistance. The pump&rsquo;s pressure difference is the voltage, the flow rate is the current, and the narrow pipe is the resistance.</p>
+    <p><strong>Time:</strong> about 3&ndash;5 minutes. It works well as an opener before the Ohm&rsquo;s Law Explorer.</p>
+    <ul>
+      <li><strong>Why the pipe changes:</strong> students set both the voltage and the current, so the resistance has to follow (R = V &divide; I). The narrow pipe gets narrower or wider to match. Turn on &ldquo;Keep the narrow pipe the same&rdquo; to fix R; then changing V changes I, the way a real circuit behaves.</li>
+      <li><strong>How flow is shown:</strong> the pipes are always full, and more current makes the water move faster. Each white marker is the same amount of water. They spread out and speed up in the narrow pipe because the same amount of water per second must squeeze through a smaller opening. The other tools in this set use dots that move at one constant speed, with spacing showing current. Both pictures show the same thing: how much charge (or water) passes a point each second.</li>
+      <li><strong>Pressure colors:</strong> warm = high pressure, cool = low pressure, the same colors used for voltage in the other tools. All of the pressure drop happens across the narrow pipe, just as all of the voltage drop happens across the resistor.</li>
+      <li><strong>Where the model breaks down:</strong> water flows out of a broken pipe, but charge does not leak out of an open circuit. Electric current also starts everywhere in the loop almost instantly. And the actual drift speed of charge in a wire is very slow (fractions of a millimeter per second), even though the &ldquo;push&rdquo; travels close to the speed of light. These make good discussion questions.</li>
+      <li>Suggested tie-in: compare with a real circuit on a breadboard. A lab power supply&rsquo;s voltage knob is the pump; a larger resistor is a narrower pipe.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

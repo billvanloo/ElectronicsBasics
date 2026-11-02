@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Electricity as Water</title>
+<meta name="description" content="A water-pipe model of a circuit: a pump pushes water around a loop of pipe, just as a battery pushes charge around a circuit. Adjust the voltage and the current and watch the flow change.">
+<style>
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
+  .layout > * { min-width: 0; }
+  .layout > .panel + .panel, .layout > .stack > .panel + .panel { margin-top: 0; }
+  @media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .controls { display: grid; gap: 14px; margin-top: 14px; }
+  .fixed { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); cursor: pointer; }
+  .fixed input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+  .fixed small { display: block; color: var(--ink-2); }
+  .readouts { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-top: 12px; }
+  .readout { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); }
+  .readout .k { font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 700; }
+  .readout .w { font-size: .8rem; color: var(--ink-2); }
+  .readout .v { font: 700 1.15rem var(--mono); }
+  table.map td:first-child, table.map th:first-child { font-weight: 600; }
+  .water-lbl { font: 700 13px var(--font); fill: #1b2330; }
+  .water-sm { font: 600 11.5px var(--font); fill: #4b5667; }
+  .bubble { fill: #ffffff; stroke: rgb(10 40 70 / .35); stroke-width: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Electricity as Water</h1>
+      <p class="lede">A circuit works a lot like water in a closed loop of pipe. The pump pushes (voltage), water flows (current), and a narrow pipe holds the flow back (resistance). Adjust the voltage and current and watch the model respond.</p>
+    </div>
+    <div class="head-tools" id="headTools"></div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-labelledby="h-water">
+      <div class="stage-title"><h2 id="h-water" style="margin:0">Water model</h2>
+        <span class="legend"><span class="item"><span class="vbar" aria-hidden="true"></span>warm = higher pressure (voltage)</span></span></div>
+      <div class="stage" id="water"></div>
+      <div class="readouts" id="readouts"></div>
+      <div style="margin-top:12px" id="captions"></div>
+    </section>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-ctl">
+        <h2 id="h-ctl">Controls</h2>
+        <div class="controls" id="controls"></div>
+        <div id="note" style="margin-top:12px"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-pred">
+        <h2 id="h-pred">Predict</h2>
+        <div id="predict"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-sc">
+        <h2 id="h-sc">The same circuit, as a schematic</h2>
+        <div class="stage" id="schem"></div>
+      </section>
+    </div>
+  </main>
+
+  <section class="panel" aria-labelledby="h-map" style="margin-top:16px">
+    <h2 id="h-map">How the model matches the circuit</h2>
+    <div class="table-wrap"><table class="data map">
+      <thead><tr><th>Water model</th><th>Electric circuit</th><th>Unit</th></tr></thead>
+      <tbody>
+        <tr><td>Pump</td><td>Battery or power supply</td><td>&mdash;</td></tr>
+        <tr><td>Pressure difference the pump creates</td><td>Voltage</td><td>volts (V)</td></tr>
+        <tr><td>Flow rate (amount of water passing a point each second)</td><td>Current</td><td>amps (A), milliamps (mA)</td></tr>
+        <tr><td>Narrow pipe that holds back the flow</td><td>Resistor (resistance)</td><td>ohms (&Omega;)</td></tr>
+        <tr><td>Pipes that are always full of water</td><td>Wires, which are always full of charge</td><td>&mdash;</td></tr>
+        <tr><td>Valve</td><td>Switch</td><td>&mdash;</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin:10px 0 0">The pump does not create water; it only pushes the water that is already in the pipes. A battery doesn&rsquo;t create charge either. It pushes the charge that is already in the wires.</p>
+  </section>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, sig, slider, Captioner, Predict, feedback, motion, about, announce, fmtR } = UI;
+  const S = Schem;
+  const VMAX = 12, IMAX = 100;          // volts, milliamps
+  const W = 26;                           // water width in a normal pipe (px)
+  const st = { V: 6, I: 30, fixed: false, Rfixed: null };
+  const R = () => (st.I > 0 ? st.V / (st.I / 1000) : Infinity);   // ohms
+  const valveClosed = () => st.V > 0 && st.I === 0;
+
+  /* ---------- geometry of the loop (in the direction of flow) ---------- */
+  const X0 = 110, X1 = 560, Y0 = 70, Y1 = 300, PUMP = [110, 185], PR = 40;
+  const C0 = 105, C1 = 265, TAPER = 32;                                      // constriction on the right side
+  const loop = [[X0, PUMP[1] - 36], [X0, Y0], [X1, Y0], [X1, Y1], [X0, Y1], [X0, PUMP[1] + 36], [X0, PUMP[1] - 36]];
+  const path = S.polyline(loop);
+  const narrowW = () => {
+    const r = R();
+    if (!isFinite(r) || st.V === 0) return W - 4;
+    const t = Math.max(0, Math.min(1, (Math.log10(r) - 1) / (Math.log10(12000) - 1)));
+    return 22 - t * 19;                                             // 22 px (10 Ω) down to 3 px (12 kΩ)
+  };
+  // distance along the loop where the right side begins
+  const sRight = (PUMP[1] - 36 - Y0) + (X1 - X0);
+  function widthAt(s) {
+    const y = Y0 + (s - sRight);
+    if (s < sRight || s > sRight + (Y1 - Y0)) return W;
+    const n = narrowW();
+    if (y < C0 || y > C1) return W;
+    if (y < C0 + TAPER) return W + (n - W) * (y - C0) / TAPER;
+    if (y > C1 - TAPER) return W + (n - W) * (C1 - y) / TAPER;
+    return n;
+  }
+  // "volume coordinate": equal steps of volume are equal amounts of water,
+  // so markers equally spaced in volume spread out (and speed up) in the narrow pipe
+  let U = [], Utot = 0;
+  function buildVolume() {
+    U = [0];
+    for (let s = 1; s <= Math.ceil(path.L); s++) U.push(U[s - 1] + widthAt(s - 0.5));
+    Utot = U[U.length - 1];
+  }
+  function sAtVolume(u) {
+    u = ((u % Utot) + Utot) % Utot;
+    let lo = 0, hi = U.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (U[m] < u) lo = m; else hi = m; }
+    return lo + (u - U[lo]) / ((U[hi] - U[lo]) || 1);
+  }
+
+  /* ---------- water drawing ---------- */
+  const svg = S.svg(680, 380, { role: 'img' });
+  $('#water').append(svg);
+  const layers = {};
+  ['pipes', 'bubbles', 'top'].forEach(k => { layers[k] = S.el('g', {}, svg); });
+  let bubbles = [], phase = 0, impeller;
+  const LANES = [-0.25, 0.25], SPACING = W * 22;
+  function drawStatic() {
+    const P = layers.pipes; P.replaceChildren();
+    const T = layers.top; T.replaceChildren();
+    const hi = S.vColor(st.V, VMAX), lo = S.vColor(0, VMAX);
+    const pipeD = `M${X0} ${Y0} H${X1} V${Y1} H${X0} Z`;
+    S.el('path', { d: pipeD, fill: 'none', stroke: '#59616c', 'stroke-width': W + 12, 'stroke-linejoin': 'round' }, P);
+    // water: high-pressure side, low-pressure side, gradient through the narrow pipe
+    const defs = S.el('defs', {}, P);
+    const gr = S.el('linearGradient', { id: 'drop', x1: 0, y1: C0, x2: 0, y2: C1, gradientUnits: 'userSpaceOnUse' }, defs);
+    S.el('stop', { offset: '0.15', 'stop-color': hi }, gr); S.el('stop', { offset: '0.85', 'stop-color': lo }, gr);
+    const water = (d, color) => S.el('path', { d, fill: 'none', stroke: color, 'stroke-width': W, 'stroke-linejoin': 'round' }, P);
+    water(`M${X0} ${PUMP[1]} V${Y0} H${X1} V${C0}`, hi);
+    water(`M${X1} ${C0} V${C1}`, 'url(#drop)');
+    water(`M${X1} ${C1} V${Y1} H${X0} V${PUMP[1]}`, lo);
+    // narrow pipe: walls pushed in from both sides
+    const n = narrowW(), half = W / 2, wall = '#59616c';
+    const side = d => S.el('path', { d: `M${X1 + d * half} ${C0} L${X1 + d * n / 2} ${C0 + TAPER} L${X1 + d * n / 2} ${C1 - TAPER} L${X1 + d * half} ${C1} Z`, fill: wall }, P);
+    side(-1); side(1);
+    S.el('text', { x: X1 + 30, y: (C0 + C1) / 2 - 6, class: 'water-lbl', text: 'Narrow pipe' }, T);
+    S.el('text', { x: X1 + 30, y: (C0 + C1) / 2 + 10, class: 'water-sm', text: '(resistor)' }, T);
+    // pump
+    S.el('circle', { cx: PUMP[0], cy: PUMP[1], r: PR, fill: '#eef1f5', stroke: '#59616c', 'stroke-width': 5 }, T);
+    impeller = S.el('g', {}, T);
+    for (let k = 0; k < 5; k++) {
+      const a = k * 72;
+      S.el('path', { d: 'M0 0 C 10 -8, 22 -10, 30 -4', fill: 'none', stroke: '#1f66c9', 'stroke-width': 5, 'stroke-linecap': 'round', transform: `rotate(${a})` }, impeller);
+    }
+    S.el('circle', { cx: 0, cy: 0, r: 7, fill: '#1b2330' }, impeller);
+    const ax = PUMP[0] + 62;
+    S.el('path', { d: `M${ax} ${PUMP[1] + 18} V${PUMP[1] - 18} M${ax - 7} ${PUMP[1] - 8} L${ax} ${PUMP[1] - 20} L${ax + 7} ${PUMP[1] - 8}`, stroke: '#1b2330', 'stroke-width': 3, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, T);
+    S.el('text', { x: ax + 12, y: PUMP[1] - 2, class: 'water-sm', text: 'pushes water' }, T);
+    S.el('text', { x: ax + 12, y: PUMP[1] + 13, class: 'water-sm', text: 'up and around' }, T);
+    S.el('text', { x: PUMP[0] - 50, y: PUMP[1] - 4, class: 'water-lbl', 'text-anchor': 'end', text: 'Pump' }, T);
+    S.el('text', { x: PUMP[0] - 50, y: PUMP[1] + 12, class: 'water-sm', 'text-anchor': 'end', text: '(battery)' }, T);
+    // valve on the top pipe (switch)
+    const vx = 230;
+    S.el('path', { d: `M${vx} ${Y0 - 19} V${Y0 - 34}`, stroke: '#3a4049', 'stroke-width': 4 }, T);
+    S.el('circle', { cx: vx, cy: Y0 - 40, r: 9, fill: 'none', stroke: valveClosed() ? '#b3261e' : '#3a4049', 'stroke-width': 4 }, T);
+    if (valveClosed()) {
+      S.el('rect', { x: vx - 5, y: Y0 - W / 2 - 4, width: 10, height: W + 8, fill: '#b3261e' }, T);
+      S.el('text', { x: vx + 18, y: Y0 - 34, class: 'water-lbl', text: 'Valve closed (switch open)' }, T).setAttribute('style', 'fill:#b3261e');
+    } else S.el('text', { x: vx + 18, y: Y0 - 34, class: 'water-sm', text: 'Valve open (switch closed)' }, T);
+    // pressure gauges
+    const gauge = (x, y, v, label, below) => {
+      const g = S.el('g', {}, T);
+      const gy = below ? y + 48 : y - 48;
+      S.el('path', { d: `M${x} ${y + (below ? W / 2 + 6 : -W / 2 - 6)} V${gy + (below ? -18 : 18)}`, stroke: '#59616c', 'stroke-width': 5 }, g);
+      S.el('circle', { cx: x, cy: gy, r: 20, fill: '#fff', stroke: '#1b2330', 'stroke-width': 2.5 }, g);
+      const a = (-135 + 270 * v / VMAX) * Math.PI / 180;
+      S.el('path', { d: `M${x} ${gy} L${x + Math.sin(a) * 15} ${gy - Math.cos(a) * 15}`, stroke: '#b3261e', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+      S.el('circle', { cx: x, cy: gy, r: 2.5, fill: '#1b2330' }, g);
+      S.vtag(g, x + 66, gy, `${label} ${v.toFixed(1)} V`);
+    };
+    gauge(470, Y0, st.V, 'High side', false);
+    gauge(470, Y1, 0, 'Low side', true);
+    // what is happening, written inside the loop
+    S.el('text', { x: X1 - 34, y: (C0 + C1) / 2 - 6, class: 'water-sm', 'text-anchor': 'end', text: 'Pressure drop across' }, T);
+    S.el('text', { x: X1 - 34, y: (C0 + C1) / 2 + 12, class: 'water-lbl', 'text-anchor': 'end', text: `the narrow pipe: ${st.V.toFixed(1)} V` }, T);
+    S.el('path', { d: `M${X1 - 24} ${C0 + 6} V${C1 - 6} M${X1 - 29} ${C0 + 12} L${X1 - 24} ${C0 + 6} L${X1 - 19} ${C0 + 12} M${X1 - 29} ${C1 - 12} L${X1 - 24} ${C1 - 6} L${X1 - 19} ${C1 - 12}`, stroke: '#4b5667', 'stroke-width': 1.6, fill: 'none' }, T);
+    S.vtag(T, 300, Y1 - 36, `Flow: ${st.I} mA`);
+    svg.setAttribute('aria-label', describe());
+  }
+  function layoutBubbles() {
+    buildVolume();
+    const n = Math.max(1, Math.floor(Utot / SPACING));
+    const need = n * LANES.length;
+    while (bubbles.length < need) bubbles.push(S.el('circle', { r: 4, class: 'bubble' }, layers.bubbles));
+    while (bubbles.length > need) bubbles.pop().remove();
+    placeBubbles();
+  }
+  function placeBubbles() {
+    const n = bubbles.length / LANES.length, step = Utot / n;
+    bubbles.forEach((b, i) => {
+      const k = Math.floor(i / LANES.length), lane = LANES[i % LANES.length];
+      const s = sAtVolume(phase + k * step + (i % LANES.length) * step / 2);
+      const [x, y] = path.at(s), [x2, y2] = path.at(Math.min(path.L, s + 1));
+      const dx = x2 - x, dy = y2 - y, L = Math.hypot(dx, dy) || 1;
+      const off = lane * widthAt(s);
+      b.setAttribute('cx', (x - dy / L * off).toFixed(1));
+      b.setAttribute('cy', (y + dx / L * off).toFixed(1));
+      // hide markers inside the pump body
+      const inPump = Math.hypot(x - PUMP[0], y - PUMP[1]) < PR - 2;
+      b.setAttribute('opacity', inPump ? 0 : 1);
+    });
+  }
+  // speed: volume per second ∝ current (100 mA ≈ 200 px/s in a normal pipe)
+  let angle = 0, last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (motion.on && st.I > 0) {
+      phase += st.I * 2 * W * dt;
+      angle = (angle + st.I * 7 * dt) % 360;
+      placeBubbles();
+    }
+    impeller.setAttribute('transform', `translate(${PUMP[0]} ${PUMP[1]}) rotate(${angle})`);
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- schematic ---------- */
+  const ssvg = S.svg(380, 230, { role: 'img' });
+  $('#schem').append(ssvg);
+  function drawSchem() {
+    ssvg.replaceChildren();
+    const cH = S.vColor(st.V, VMAX), cL = S.vColor(0, VMAX);
+    S.battery(ssvg, 60, 170, 60, 70, { cneg: cL, cpos: cH, markSide: 'left' });
+    S.label(ssvg, 92, 124, st.V.toFixed(1) + ' V', { anchor: 'start' });
+    S.wire(ssvg, [[60, 70], [60, 30], [110, 30]], cH);
+    S.sw(ssvg, 110, 30, 180, 30, { closed: !valveClosed(), ca: cH, cb: cH });
+    S.wire(ssvg, [[180, 30], [205, 30]], cH);
+    S.meter(ssvg, 205, 30, 265, 30, 'A', { ca: cH, cb: cH });
+    S.vtag(ssvg, 235, 62, st.I + ' mA');
+    S.wire(ssvg, [[265, 30], [320, 30], [320, 65]], cH);
+    S.resistor(ssvg, 320, 65, 320, 175, { ca: cH, cb: cL });
+    S.label(ssvg, 300, 116, 'R', { anchor: 'end' });
+    S.label(ssvg, 300, 134, rText(), { anchor: 'end', cls: 'lbl-val' });
+    S.wire(ssvg, [[320, 175], [320, 205], [60, 205], [60, 170]], cL);
+    ssvg.setAttribute('aria-label', `Schematic: a ${st.V.toFixed(1)} volt battery, a ${valveClosed() ? 'open' : 'closed'} switch, an ammeter reading ${st.I} milliamps, and a resistor of ${rText(true)}, in one loop.`);
+  }
+  const rText = spoken => {
+    const r = R();
+    if (st.V === 0 && st.I === 0) return spoken ? 'any value' : '—';
+    if (!isFinite(r)) return spoken ? 'infinite resistance (the circuit is open)' : '∞ (open)';
+    return spoken ? UI.spokenUnits(fmtR(r)) : fmtR(r);
+  };
+
+  /* ---------- readouts, captions, description ---------- */
+  function drawReadouts() {
+    const ro = (k, w, v) => h('div', { class: 'readout' }, h('div', { class: 'k' }, k), h('div', { class: 'w' }, w), h('div', { class: 'v' }, v));
+    $('#readouts').replaceChildren(
+      ro('Voltage', 'pump pressure', st.V.toFixed(1) + ' V'),
+      ro('Current', 'flow rate', st.I + ' mA'),
+      ro('Resistance', 'narrow pipe', rText()),
+      ro('Power', 'V × I', sig(st.V * st.I / 1000, 2) + ' W'));
+  }
+  function describe() {
+    if (st.V === 0) return 'Water model: the pump is off, so there is no pressure difference and the water does not move.';
+    if (valveClosed()) return `Water model: the pump is pushing with ${st.V.toFixed(1)} volts of pressure, but the valve is closed, so no water flows. This is an open switch.`;
+    return `Water model: the pump pushes water up and around the loop with ${st.V.toFixed(1)} volts of pressure. Water flows at ${st.I} milliamps through a narrow pipe of ${rText(true)}, where the pressure drops from high to low. The water speeds up in the narrow pipe and slows down again after it.`;
+  }
+  const cap = new Captioner($('#captions'), { initial: 'The pump pushes water around the loop. Each white marker is a bit of water; the pipes are always full.' });
+  let capTimer;
+  function caption(changed) {
+    clearTimeout(capTimer);
+    capTimer = setTimeout(() => {
+      let t;
+      if (st.V === 0) t = 'The pump is off. With no pressure difference, nothing pushes the water, so the flow is zero.';
+      else if (valveClosed()) t = 'The valve is closed, like an open switch. The pump still pushes, but no water can flow.';
+      else if (st.fixed) t = changed === 'V'
+        ? `Same narrow pipe, ${st.V.toFixed(1)} V of pressure: the flow is now ${st.I} mA. More push through the same pipe means more flow.`
+        : `Same narrow pipe, ${st.I} mA of flow: that takes ${st.V.toFixed(1)} V of pressure.`;
+      else if (changed === 'V') t = `Pressure ${st.V.toFixed(1)} V with the flow held at ${st.I} mA: the narrow pipe became ${R() > lastR ? 'narrower' : 'wider'} (${fmtR(R())}) to hold the flow back.`;
+      else t = `Flow ${st.I} mA with the pressure held at ${st.V.toFixed(1)} V: the narrow pipe became ${R() > lastR ? 'narrower' : 'wider'} (${fmtR(R())}) to let ${R() > lastR ? 'less' : 'more'} water through.`;
+      cap.set(t);
+      lastR = R();
+    }, 350);
+  }
+  let lastR = R();
+
+  /* ---------- controls ---------- */
+  const sV = slider({ id: 'sV', label: 'Voltage (pump pressure)', min: 0, max: VMAX, step: 0.5, value: st.V, format: v => v.toFixed(1) + ' V', onInput: v => setV(v) });
+  const sI = slider({ id: 'sI', label: 'Current (flow rate)', min: 0, max: IMAX, step: 1, value: st.I, format: v => v + ' mA', onInput: v => setI(v) });
+  const fixedBox = h('input', { type: 'checkbox', id: 'fixed' });
+  const fixedLbl = h('label', { class: 'fixed', for: 'fixed' }, fixedBox, h('span', {}, 'Keep the narrow pipe (resistor) the same', h('small', {}, 'Then changing the voltage changes the current, and changing the current changes the voltage: V = I × R.')));
+  $('#controls').append(sV.el, sI.el, fixedLbl);
+  $('#headTools').append(motion.button());
+
+  function note(kind, title, text) { $('#note').replaceChildren(kind ? feedback(kind, title, text) : ''); }
+  function setV(v) {
+    st.V = v;
+    if (st.fixed && isFinite(st.Rfixed)) {
+      let I = Math.round(v / st.Rfixed * 1000);
+      if (I > IMAX) { I = IMAX; st.V = +(IMAX / 1000 * st.Rfixed).toFixed(1); sV.set(st.V); note('info', 'Top of the current range', ` With this pipe, ${IMAX} mA is reached at ${st.V.toFixed(1)} V.`); }
+      st.I = I; sI.set(st.I);
+    }
+    if (st.V === 0) { st.I = 0; sI.set(0); }
+    sI.input.disabled = st.V === 0;
+    update('V');
+  }
+  function setI(i) {
+    if (st.V === 0) { sI.set(0); return; }
+    st.I = i;
+    if (st.fixed && isFinite(st.Rfixed)) {
+      let V = +(i / 1000 * st.Rfixed).toFixed(2);
+      if (V > VMAX) { V = VMAX; st.I = Math.floor(VMAX / st.Rfixed * 1000); sI.set(st.I); note('info', 'Top of the voltage range', ` With this pipe, ${VMAX} V gives ${st.I} mA.`); }
+      st.V = V; sV.set(+V.toFixed(1));
+    }
+    update('I');
+  }
+  fixedBox.addEventListener('change', () => {
+    st.fixed = fixedBox.checked;
+    st.Rfixed = st.fixed ? R() : null;
+    if (st.fixed && !isFinite(st.Rfixed)) note('info', 'The valve is closed', ' With the valve closed (an open switch), no pressure can make water flow. Open it by raising the current first.');
+    else note(null);
+    announce(st.fixed ? `Narrow pipe locked at ${rText(true)}.` : 'Narrow pipe unlocked. It now adjusts to match the voltage and current you set.');
+  });
+
+  /* ---------- predict ---------- */
+  let v0 = null;
+  const predict = new Predict($('#predict'), {
+    question: 'Keep the same narrow pipe and double the pump pressure. The flow (current) will…',
+    choices: ['double', 'be cut in half', 'stay the same'],
+    onLock: () => {
+      st.fixed = false; st.V = 3; st.I = 15; sV.set(3); sI.set(15); sI.input.disabled = false;
+      fixedBox.checked = true; st.fixed = true; st.Rfixed = R();
+      v0 = 3; update();
+      note('info', 'Try it', ' The pipe is now locked at 200 Ω, starting from 3.0 V and 15 mA. Raise the voltage to 6.0 V.');
+    }
+  });
+  function maybeReveal() {
+    if (v0 == null || !st.fixed || st.V < v0 * 2 - 1e-9) return;
+    v0 = null;
+    const k = st.V / 3;
+    predict.reveal(0, `At 3.0 V the flow was 15 mA; at ${st.V.toFixed(1)} V it is ${st.I} mA. The push went up ${k.toFixed(1)} times and so did the flow: through the same pipe, flow is proportional to push. That is Ohm\u2019s law: I = V \u00f7 R.`);
+    note(null);
+  }
+
+  function update(changed) {
+    if (st.fixed && !isFinite(st.Rfixed) && st.I > 0) st.Rfixed = R();
+    drawStatic(); layoutBubbles(); drawSchem(); drawReadouts();
+    if (changed) caption(changed);
+    maybeReveal();
+  }
+  update();
+  requestAnimationFrame(tick);
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> A model for voltage, current and resistance. The pump&rsquo;s pressure difference is the voltage, the flow rate is the current, and the narrow pipe is the resistance.</p>
+    <p><strong>Time:</strong> about 3&ndash;5 minutes. It works well as an opener before the Ohm&rsquo;s Law Explorer.</p>
+    <ul>
+      <li><strong>Why the pipe changes:</strong> students set both the voltage and the current, so the resistance has to follow (R = V &divide; I). The narrow pipe gets narrower or wider to match. Turn on &ldquo;Keep the narrow pipe the same&rdquo; to fix R; then changing V changes I, the way a real circuit behaves.</li>
+      <li><strong>How flow is shown:</strong> the pipes are always full, and more current makes the water move faster. Each white marker is the same amount of water. They spread out and speed up in the narrow pipe because the same amount of water per second must squeeze through a smaller opening. The other tools in this set use dots that move at one constant speed, with spacing showing current. Both pictures show the same thing: how much charge (or water) passes a point each second.</li>
+      <li><strong>Pressure colors:</strong> warm = high pressure, cool = low pressure, the same colors used for voltage in the other tools. All of the pressure drop happens across the narrow pipe, just as all of the voltage drop happens across the resistor.</li>
+      <li><strong>Where the model breaks down:</strong> water flows out of a broken pipe, but charge does not leak out of an open circuit. Electric current also starts everywhere in the loop almost instantly. And the actual drift speed of charge in a wire is very slow (fractions of a millimeter per second), even though the &ldquo;push&rdquo; travels close to the speed of light. These make good discussion questions.</li>
+      <li>Suggested tie-in: compare with a real circuit on a breadboard. A lab power supply&rsquo;s voltage knob is the pump; a larger resistor is a narrower pipe.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>
