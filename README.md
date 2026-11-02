@@ -22,6 +22,10 @@ Each tool also works on its own, for example as a single linked file. The only t
 
 Every tool has an "About this tool" panel at the bottom with teacher notes: what it teaches, the numbers behind it, and a suggested tie-in to a breadboard build.
 
+## Live site (GitHub Pages)
+
+`.github/workflows/pages.yml` rebuilds `dist/` and publishes it to GitHub Pages every time `main` changes. One-time setup: in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. The site is then at https://billvanloo.github.io/ElectronicsBasics/
+
 ## Edit and rebuild
 
 The source is in `src/`. Shared code lives in `src/shared/` (styles, circuit solver, schematic and breadboard drawing, current dots, UI pieces). Each tool's page lives in `src/tools/`. The build inlines the shared code into each tool:
