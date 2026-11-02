@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Walk the Voltage Loop</title>
+<meta name="description" content="Walk a marker around a series loop and watch the voltage rise at the battery and drop across each resistor, ending where it started.">
+<style>
+  .layout > * { min-width: 0; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .layout > .panel + .panel { margin-top: 0; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } #predPanel { order: -1; } }
+  .graph-wrap { background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+  .graph-wrap svg { display: block; width: 100%; height: auto; }
+  .axis text { font: 600 12px var(--font); fill: #4b5667; }
+  .axis .title { font: 700 13px var(--font); fill: #1b2330; }
+  .axis .node { font: 800 14px var(--font); fill: #1b2330; }
+  .gridline { stroke: #e6e9ee; }
+  .walker { fill: #7b3fe4; stroke: #fff; stroke-width: 3; }
+  .walker-ring { fill: none; stroke: #7b3fe4; stroke-width: 2; opacity: .5; }
+  .pred-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
+  .pred-grid label { display: grid; gap: 4px; font-weight: 600; font-size: .92rem; }
+  .pred-grid input { min-height: 44px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); background: var(--surface); width: 100%; }
+  .tally { font: 700 1.05rem var(--mono); padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); min-height: 48px; overflow-wrap: anywhere; }
+  .tally .zero { color: var(--ok); }
+  .stage:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .sliders { display: grid; gap: 10px; }
+  .cases { display: grid; gap: 12px; }
+  .case { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface-2); }
+  .case table { margin: 6px 0 10px; }
+  .case .choices { display: grid; gap: 6px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Walk the Voltage Loop</h1>
+      <p class="lede">Follow a marker once around a series loop. The graph tracks the marker&rsquo;s voltage &ldquo;height&rdquo;: up across the battery, down across each resistor, and level along each wire.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <section class="panel" aria-labelledby="h-circ">
+        <div class="stage-title"><h2 id="h-circ" style="margin:0">The loop</h2><span class="legend"><span class="item"><span class="vbar" aria-hidden="true"></span>warm = higher voltage</span></span></div>
+        <div class="stage" id="stage" tabindex="0" aria-describedby="stageHelp"></div>
+        <p class="small muted" id="stageHelp" style="margin:6px 0 0">Tip: click the loop, then use the Left and Right arrow keys to step the marker.</p>
+        <div class="row" style="margin-top:12px" role="group" aria-label="Walk controls">
+          <button class="btn btn-primary" id="start" type="button" disabled>Start walk</button>
+          <button class="btn" id="back" type="button" disabled>&#9664; Back</button>
+          <button class="btn" id="fwd" type="button" disabled>Step &#9654;</button>
+          <button class="btn" id="reset" type="button" disabled>Reset</button>
+        </div>
+        <h3 style="margin-top:14px">Running total</h3>
+        <div class="tally" id="tally">Start at point A (0 V).</div>
+        <div id="captions" style="margin-top:12px"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-graph">
+        <h2 id="h-graph">Voltage around the loop</h2>
+        <div class="graph-wrap" id="graph"></div>
+        <p class="small muted" id="graphSummary" style="margin-top:8px"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-pred" id="predPanel">
+        <h2 id="h-pred">1. Predict</h2>
+        <p class="small muted" style="margin:0">The battery is 9.0 V. R1 = 1 k&Omega;, R2 = 2 k&Omega;, R3 = 3 k&Omega;. How many volts does the marker drop across each resistor?</p>
+        <div class="pred-grid" id="predGrid"></div>
+        <p class="small" id="predSum" aria-live="polite">Your drops add up to: &mdash;</p>
+        <div class="row"><button class="btn btn-primary" id="lock" type="button" disabled>Lock in predictions</button></div>
+        <div id="compare" style="margin-top:10px"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-reb">
+        <h2 id="h-reb">2. Rebalance</h2>
+        <p class="small muted" id="rebHint" style="margin:0 0 8px">Finish one walk to unlock the resistor sliders.</p>
+        <div class="sliders" id="sliders"></div>
+        <div id="reveal" style="margin-top:12px"></div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="h-fault" style="margin-top:16px">
+      <h2 id="h-fault">3. Fault-finder</h2>
+      <p class="muted">Each set below shows meter readings from the same 9.0 V loop (R1 = 1 k&Omega;, R2 = 2 k&Omega;, R3 = 3 k&Omega;) after something went wrong. Use the voltage loop rule to work out what happened. Checking readings like this before powering up your own designs can save parts.</p>
+      <div class="cases" id="cases"></div>
+    </section>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, sig, slider, feedback, about, announce, fmtR, motion, Captioner } = UI;
+  const S = Schem;
+  const VB = 9;
+  const st = { R: [1000, 2000, 3000], pred: null, u: 0, walked: false, walking: false };
+  let V;   // node voltages
+  function solve() {
+    const r = Engine.solve([{ id: 'BAT', type: 'vsource', pos: 'B', neg: 'A', V: VB },
+      { id: 'R1', type: 'resistor', a: 'B', b: 'C', R: st.R[0] }, { id: 'R2', type: 'resistor', a: 'C', b: 'D', R: st.R[1] }, { id: 'R3', type: 'resistor', a: 'D', b: 'A', R: st.R[2] }]);
+    V = { A: 0, B: r.V.B, C: r.V.C, D: r.V.D, I: r.I.BAT };
+  }
+  solve();
+
+  /* pieces of the walk: circuit path + graph width + voltage at start/end */
+  const pieces = () => [
+    { kind: 'wire', node: 'A', pts: [[70, 270], [70, 220]], gw: .5, v0: 0, v1: 0 },
+    { kind: 'battery', name: 'battery', pts: [[70, 220], [70, 100]], gw: 1, v0: 0, v1: V.B },
+    { kind: 'wire', node: 'B', pts: [[70, 100], [70, 50], [150, 50]], gw: 1, v0: V.B, v1: V.B },
+    { kind: 'res', name: 'R1', pts: [[150, 50], [270, 50]], gw: 1, v0: V.B, v1: V.C },
+    { kind: 'wire', node: 'C', pts: [[270, 50], [360, 50], [360, 100]], gw: 1, v0: V.C, v1: V.C },
+    { kind: 'res', name: 'R2', pts: [[360, 100], [360, 220]], gw: 1, v0: V.C, v1: V.D },
+    { kind: 'wire', node: 'D', pts: [[360, 220], [360, 270], [290, 270]], gw: 1, v0: V.D, v1: V.D },
+    { kind: 'res', name: 'R3', pts: [[290, 270], [170, 270]], gw: 1, v0: V.D, v1: 0 },
+    { kind: 'wire', node: 'A', pts: [[170, 270], [70, 270]], gw: .5, v0: 0, v1: 0 }
+  ];
+  const UTOT = 8, STOPS = [0, 2, 4, 6, 8], STOP_NAMES = ['A', 'B', 'C', 'D', 'A'];
+  function locate(u) {
+    const P = pieces(); let acc = 0;
+    for (const p of P) {
+      if (u <= acc + p.gw + 1e-9) {
+        const f = Math.max(0, Math.min(1, (u - acc) / p.gw));
+        const pl = S.polyline(p.pts);
+        return { xy: pl.at(f * pl.L), v: p.v0 + (p.v1 - p.v0) * f, piece: p };
+      }
+      acc += p.gw;
+    }
+    const last = P[P.length - 1]; return { xy: last.pts[last.pts.length - 1], v: 0, piece: last };
+  }
+
+  /* ---------- circuit ---------- */
+  const csv = S.svg(430, 320, { role: 'img' });
+  $('#stage').append(csv);
+  function drawCircuit() {
+    csv.replaceChildren();
+    const c = n => S.vColor(V[n], VB);
+    S.wire(csv, [[70, 100], [70, 50], [150, 50]], c('B'));
+    S.resistor(csv, 150, 50, 270, 50, { ca: c('B'), cb: c('C') });
+    S.wire(csv, [[270, 50], [360, 50], [360, 100]], c('C'));
+    S.resistor(csv, 360, 100, 360, 220, { ca: c('C'), cb: c('D') });
+    S.wire(csv, [[360, 220], [360, 270], [290, 270]], c('D'));
+    S.resistor(csv, 290, 270, 170, 270, { ca: c('D'), cb: c('A') });
+    S.wire(csv, [[170, 270], [70, 270], [70, 220]], c('A'));
+    S.battery(csv, 70, 220, 70, 100, { cneg: c('A'), cpos: c('B'), markSide: 'left', cells: 3 });
+    S.label(csv, 104, 156, 'Battery', { anchor: 'start', cls: 'lbl-sm' });
+    S.label(csv, 104, 172, '9.0 V', { anchor: 'start', cls: 'lbl-val' });
+    S.label(csv, 210, 30, 'R1 = ' + fmtR(st.R[0]));
+    S.label(csv, 338, 156, 'R2', { anchor: 'end' }); S.label(csv, 338, 172, fmtR(st.R[1]), { anchor: 'end', cls: 'lbl-val' });
+    S.label(csv, 230, 304, 'R3 = ' + fmtR(st.R[2]));
+    const tag = (x, y, n) => { S.label(csv, x, y, n); S.vtag(csv, x, y + 16, sig(V[n], 3) + ' V'); };
+    tag(46, 40, 'B'); tag(388, 40, 'C'); tag(388, 262, 'D'); tag(46, 262, 'A');
+    // walker
+    const L = locate(st.u);
+    S.el('circle', { cx: L.xy[0], cy: L.xy[1], r: 15, class: 'walker-ring' }, csv);
+    S.el('circle', { cx: L.xy[0], cy: L.xy[1], r: 9, class: 'walker' }, csv);
+    csv.setAttribute('aria-label', `Series loop: a 9 volt battery, then R1 (${fmtR(st.R[0])}), R2 (${fmtR(st.R[1])}) and R3 (${fmtR(st.R[2])}) back to the battery. Point voltages: A 0 volts, B ${sig(V.B, 3)} volts, C ${sig(V.C, 3)} volts, D ${sig(V.D, 3)} volts. The marker is at ${sig(L.v, 2)} volts.`);
+  }
+
+  /* ---------- graph ---------- */
+  const G = { w: 560, h: 340, l: 56, r: 20, t: 20, b: 52 };
+  const gsvg = S.svg(G.w, G.h, { role: 'img' });
+  $('#graph').append(gsvg);
+  const X = u => G.l + (u / UTOT) * (G.w - G.l - G.r), Y = v => G.h - G.b - (v / 10) * (G.h - G.t - G.b);
+  function profile(u1) {
+    const pts = []; let acc = 0;
+    for (const p of pieces()) {
+      if (acc > u1) break;
+      if (!pts.length) pts.push([acc, p.v0]);
+      const end = Math.min(acc + p.gw, u1);
+      const f = (end - acc) / p.gw;
+      pts.push([end, p.v0 + (p.v1 - p.v0) * f]);
+      acc += p.gw;
+    }
+    return pts;
+  }
+  function drawGraph() {
+    gsvg.replaceChildren();
+    const ax = S.el('g', { class: 'axis' }, gsvg);
+    for (let v = 0; v <= 10; v += 2) {
+      S.el('line', { x1: X(0), x2: X(UTOT), y1: Y(v), y2: Y(v), class: 'gridline' }, ax);
+      S.el('text', { x: X(0) - 8, y: Y(v) + 4, 'text-anchor': 'end', text: v }, ax);
+    }
+    // component bands
+    let acc = 0;
+    for (const p of pieces()) {
+      if (p.kind !== 'wire') {
+        S.el('rect', { x: X(acc), y: Y(10), width: X(acc + p.gw) - X(acc), height: Y(0) - Y(10), fill: p.kind === 'battery' ? '#fff1e6' : '#eef4fb' }, ax);
+        S.el('text', { x: X(acc + p.gw / 2), y: Y(10) + 14, 'text-anchor': 'middle', text: p.name === 'battery' ? 'battery' : p.name }, ax);
+      }
+      acc += p.gw;
+    }
+    STOPS.forEach((u, i) => {
+      S.el('line', { x1: X(u), x2: X(u), y1: Y(0), y2: Y(0) + 6, stroke: '#1b2330' }, ax);
+      S.el('text', { x: X(u), y: Y(0) + 22, 'text-anchor': 'middle', class: 'node', text: STOP_NAMES[i] }, ax);
+    });
+    S.el('path', { d: `M${X(0)} ${Y(10)} V${Y(0)} H${X(UTOT)}`, stroke: '#1b2330', 'stroke-width': 1.5, fill: 'none' }, ax);
+    S.el('text', { x: (X(0) + X(UTOT)) / 2, y: G.h - 8, 'text-anchor': 'middle', class: 'title', text: 'Position around the loop' }, ax);
+    S.el('text', { x: 16, y: (Y(0) + Y(10)) / 2, 'text-anchor': 'middle', class: 'title', transform: `rotate(-90 16 ${(Y(0) + Y(10)) / 2})`, text: 'Voltage (V)' }, ax);
+    // predicted profile (dashed)
+    if (st.pred) {
+      const pv = [0, VB, VB - st.pred[0], VB - st.pred[0] - st.pred[1], VB - st.pred[0] - st.pred[1] - st.pred[2]];
+      const pp = [[0, 0], [.5, 0], [1.5, pv[1]], [2.5, pv[1]], [3.5, pv[2]], [4.5, pv[2]], [5.5, pv[3]], [6.5, pv[3]], [7.5, pv[4]], [8, pv[4]]];
+      S.el('path', { d: pp.map((p, i) => (i ? 'L' : 'M') + X(p[0]) + ' ' + Y(Math.max(-0.5, Math.min(10.5, p[1])))).join(' '), stroke: '#8c94a0', 'stroke-width': 2.5, 'stroke-dasharray': '7 6', fill: 'none' }, gsvg);
+    }
+    // actual profile up to the marker
+    const pr = profile(st.u);
+    S.el('path', { d: pr.map((p, i) => (i ? 'L' : 'M') + X(p[0]) + ' ' + Y(p[1])).join(' '), stroke: '#7b3fe4', 'stroke-width': 3.5, fill: 'none', 'stroke-linejoin': 'round' }, gsvg);
+    const L = locate(st.u);
+    S.el('circle', { cx: X(st.u), cy: Y(L.v), r: 8, class: 'walker' }, gsvg);
+    S.vtag(gsvg, Math.min(X(st.u) + 34, G.w - 36), Math.max(Y(L.v) - 16, 30), sig(L.v, 2) + ' V');
+    // key
+    const ky = G.t + 26;
+    S.el('path', { d: `M${G.w - 200} ${ky} h26`, stroke: '#7b3fe4', 'stroke-width': 3.5 }, gsvg);
+    S.el('text', { x: G.w - 168, y: ky + 4, class: 'lbl-sm', text: 'marker’s walk' }, gsvg);
+    if (st.pred) {
+      S.el('path', { d: `M${G.w - 200} ${ky + 18} h26`, stroke: '#8c94a0', 'stroke-width': 2.5, 'stroke-dasharray': '7 6' }, gsvg);
+      S.el('text', { x: G.w - 168, y: ky + 22, class: 'lbl-sm', text: 'your prediction' }, gsvg);
+    }
+    const sum = `The marker is at ${sig(L.v, 2)} volts. Point voltages: A 0, B ${sig(V.B, 3)}, C ${sig(V.C, 3)}, D ${sig(V.D, 3)}, back to A at 0 volts. Rises across the battery: ${sig(V.B, 3)} volts. Drops: R1 ${sig(V.B - V.C, 3)}, R2 ${sig(V.C - V.D, 3)}, R3 ${sig(V.D, 3)} volts.`;
+    gsvg.setAttribute('aria-label', 'Graph of voltage against position around the loop. ' + sum);
+    $('#graphSummary').textContent = st.walked ? sum : 'The purple line is drawn as the marker walks.';
+  }
+
+  /* ---------- tally ---------- */
+  function drawTally() {
+    const drops = [V.B - V.C, V.C - V.D, V.D];
+    const parts = [];
+    if (st.u >= 1.5 - 1e-9) parts.push(`+${sig(V.B, 2)} V`);
+    if (st.u >= 3.5 - 1e-9) parts.push(`− ${sig(drops[0], 2)} V`);
+    if (st.u >= 5.5 - 1e-9) parts.push(`− ${sig(drops[1], 2)} V`);
+    if (st.u >= 7.5 - 1e-9) parts.push(`− ${sig(drops[2], 2)} V`);
+    const el = $('#tally');
+    if (!parts.length) { el.textContent = 'Start at point A (0 V).'; return; }
+    const total = st.u >= 7.5 - 1e-9 ? 0 : locate(st.u).v;
+    el.replaceChildren(parts.join(' '), ' = ', st.u >= 7.5 - 1e-9 ? h('span', { class: 'zero' }, '0 V ✔ back where you started') : `${sig(total, 2)} V`);
+  }
+
+  function render() { drawCircuit(); drawGraph(); drawTally(); }
+
+  /* ---------- predictions ---------- */
+  const inputs = ['R1', 'R2', 'R3'].map((n, i) => {
+    const id = 'p' + n;
+    const inp = h('input', { id, type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: 'volts' });
+    $('#predGrid').append(h('label', { for: id }, `Drop across ${n} (V)`, inp));
+    return inp;
+  });
+  const vals = () => inputs.map(i => parseFloat(i.value.replace(',', '.')));
+  inputs.forEach(i => i.addEventListener('input', () => {
+    const v = vals();
+    const ok = v.every(x => isFinite(x));
+    $('#predSum').textContent = 'Your drops add up to: ' + (ok ? sig(v[0] + v[1] + v[2], 3) + ' V' : '—');
+    $('#lock').disabled = !ok;
+  }));
+  $('#lock').addEventListener('click', () => {
+    st.pred = vals();
+    inputs.forEach(i => { i.disabled = true; });
+    $('#lock').hidden = true;
+    ['start', 'fwd', 'back', 'reset'].forEach(id => { $('#' + id).disabled = false; });
+    announce('Predictions locked. Press Start walk, or use Step.');
+    $('#compare').replaceChildren(feedback('info', 'Predictions locked', ' Your prediction is the dashed line on the graph. Now walk the loop.'));
+    render();
+  });
+
+  /* ---------- walking ---------- */
+  const cap = new Captioner($('#captions'), { initial: 'Type your predictions and lock them in, then start the walk at point A.' });
+  function arrive() {
+    const k = STOPS.findIndex(s => Math.abs(s - st.u) < 1e-6);
+    if (k < 0) return;
+    const name = STOP_NAMES[k];
+    const v = sig(locate(st.u).v, 2);
+    const drops = [V.B - V.C, V.C - V.D, V.D];
+    const msg = [
+      'Point A, 0 V. This is the starting point.',
+      `Across the battery the marker rises ${sig(V.B, 2)} V. Point B: ${v} V.`,
+      `Across R1 it drops ${sig(drops[0], 2)} V. The wire to point C is level. Point C: ${v} V.`,
+      `Across R2 it drops ${sig(drops[1], 2)} V. Point D: ${v} V.`,
+      `Across R3 it drops ${sig(drops[2], 2)} V. Back at A, where the walk began: 0 V. Net change around the loop: 0 V.`][k];
+    cap.set(msg);
+    if (k === 4) finishWalk();
+  }
+  function finishWalk() {
+    if (st.walked) return;
+    st.walked = true;
+    const drops = [V.B - V.C, V.C - V.D, V.D];
+    $('#compare').replaceChildren(h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Resistor'), h('th', { class: 'num' }, 'Your prediction (V)'), h('th', { class: 'num' }, 'Actual drop (V)'))),
+      h('tbody', {}, ...['R1', 'R2', 'R3'].map((n, i) => h('tr', {}, h('td', {}, n), h('td', { class: 'num' }, sig(st.pred[i], 3)), h('td', { class: 'num' }, sig(drops[i], 3))))),
+      h('tfoot', {}, h('tr', {}, h('th', {}, 'Total'), h('td', { class: 'num' }, sig(st.pred[0] + st.pred[1] + st.pred[2], 3)), h('td', { class: 'num' }, sig(drops[0] + drops[1] + drops[2], 3)))))),
+      h('p', { class: 'small', style: 'margin-top:8px' }, 'The larger the resistor, the larger its share of the 9 V. Here R1 : R2 : R3 = 1 : 2 : 3, so the drops are 1.5 V, 3.0 V and 4.5 V.'));
+    buildSliders();
+    showReveal();
+  }
+  function showReveal(changed) {
+    $('#reveal').replaceChildren(feedback('ok', 'Kirchhoff’s voltage law', (changed ? ' The individual drops changed; the total did not. ' : ' ') + `Around any closed loop, the rises equal the drops: +${sig(V.B, 2)} − ${sig(V.B - V.C, 2)} − ${sig(V.C - V.D, 2)} − ${sig(V.D, 2)} = 0 V.`));
+  }
+  let anim = null;
+  function goTo(target, animate) {
+    if (anim) cancelAnimationFrame(anim), anim = null;
+    if (!animate || !motion.on) { st.u = target; render(); arrive(); return; }
+    const from = st.u, dur = Math.abs(target - from) * 1100, t0 = performance.now();
+    let lastStop = from;
+    const step = now => {
+      const f = Math.min(1, (now - t0) / dur);
+      st.u = from + (target - from) * f;
+      render();
+      // announce stops passed along the way
+      for (const s of STOPS) if ((lastStop < s && st.u >= s - 1e-9) && s !== from) { const keep = st.u; st.u = s; arrive(); st.u = keep; lastStop = s; }
+      if (f < 1) anim = requestAnimationFrame(step); else { anim = null; st.walking = false; $('#start').textContent = st.walked ? 'Walk again' : 'Start walk'; }
+    };
+    anim = requestAnimationFrame(step);
+  }
+  const nextStop = () => STOPS.find(s => s > st.u + 1e-6) ?? UTOT;
+  const prevStop = () => [...STOPS].reverse().find(s => s < st.u - 1e-6) ?? 0;
+  $('#start').addEventListener('click', () => {
+    if (!motion.on) { goTo(nextStop(), false); return; }
+    if (st.u >= UTOT - 1e-6) { st.u = 0; render(); }
+    st.walking = true; $('#start').textContent = 'Walking…';
+    goTo(UTOT, true);
+  });
+  $('#fwd').addEventListener('click', () => goTo(nextStop(), true));
+  $('#back').addEventListener('click', () => goTo(prevStop(), false));
+  $('#reset').addEventListener('click', () => { goTo(0, false); });
+  $('#stage').addEventListener('keydown', e => {
+    if (!st.pred) return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); goTo(nextStop(), true); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(prevStop(), false); }
+  });
+
+  /* ---------- rebalance sliders ---------- */
+  let built = false;
+  function buildSliders() {
+    if (built) return; built = true;
+    $('#rebHint').textContent = 'Change any resistor. The drops rebalance, but the marker always returns to 0 V at point A.';
+    ['R1', 'R2', 'R3'].forEach((n, i) => {
+      const s = slider({ id: 's' + n, label: n, min: 0.5, max: 5, step: 0.5, value: st.R[i] / 1000, format: v => sig(v, 2) + ' kΩ',
+        onInput: v => { st.R[i] = v * 1000; solve(); st.u = UTOT; render(); showReveal(true); cap.set(`Drops now: R1 ${sig(V.B - V.C, 2)} V, R2 ${sig(V.C - V.D, 2)} V, R3 ${sig(V.D, 2)} V. Together they still equal the battery's ${sig(V.B, 2)} V.`); } });
+      $('#sliders').append(s.el);
+    });
+  }
+
+  /* ---------- fault-finder ---------- */
+  const CHOICES = ['Everything is working normally', 'R1 is shorted', 'R2 is shorted', 'R3 is open (broken)', 'A reading must be wrong: measure again'];
+  const CASES = [
+    { r: [2.25, 0.00, 6.75], ans: 2, why: 'R2 reads 0 V, so it has no resistance left: it is shorted. With only R1 and R3 sharing the 9 V (in a 1 : 3 ratio), they read 2.25 V and 6.75 V. The drops still add up to 9 V.' },
+    { r: [0.00, 0.00, 9.00], ans: 3, why: 'With an open R3, no current flows, so R1 and R2 have no drop. The whole 9 V appears across the gap at R3. The drops still add up to 9 V.' },
+    { r: [1.50, 4.20, 4.50], ans: 4, why: 'These add up to 10.2 V, but the battery only provides 9.0 V. The drops around a loop must equal the rise, so one reading is wrong. R2 should read 3.0 V. Check the meter range and probe contact, then measure again.' }
+  ];
+  CASES.forEach((c, k) => {
+    const name = 'case' + k;
+    const radios = CHOICES.map((t, i) => h('input', { type: 'radio', name, value: i }));
+    const out = h('div');
+    const btn = h('button', { class: 'btn btn-small btn-primary', type: 'button' }, 'Check');
+    btn.addEventListener('click', () => {
+      const i = radios.findIndex(r => r.checked);
+      if (i < 0) { out.replaceChildren(feedback('info', 'Choose an answer first')); return; }
+      out.replaceChildren(feedback(i === c.ans ? 'ok' : 'bad', null, ' ' + (i === c.ans ? c.why : 'Add up the three readings and compare with the 9.0 V battery. Then look for a reading of 0 V (no drop) or the full 9 V (a gap).')));
+    });
+    const sum = c.r[0] + c.r[1] + c.r[2];
+    $('#cases').append(h('div', { class: 'case' }, h('h3', {}, `Set ${k + 1}`),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
+        h('thead', {}, h('tr', {}, h('th', {}, 'Battery'), h('th', { class: 'num' }, 'Across R1'), h('th', { class: 'num' }, 'Across R2'), h('th', { class: 'num' }, 'Across R3'))),
+        h('tbody', {}, h('tr', {}, h('td', {}, '9.00 V'), ...c.r.map(v => h('td', { class: 'num' }, v.toFixed(2) + ' V')))))),
+      h('fieldset', { style: 'border:0;margin:0;padding:0' }, h('legend', { style: 'font-weight:700' }, 'What is wrong?'),
+        h('div', { class: 'choices' }, CHOICES.map((t, i) => h('label', { class: 'choice' }, radios[i], h('span', {}, t))))), btn, out));
+  });
+
+  render();
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> Around any closed loop, the voltage rises equal the voltage drops, so the net change is zero (Kirchhoff&rsquo;s voltage law). That holds even when the individual resistor drops change.</p>
+    <p><strong>Time:</strong> 2&ndash;3 minutes for the walk and rebalance, plus a few minutes for the fault-finder.</p>
+    <ul>
+      <li>The numbers: 9 V across 6 k&Omega; in total gives 1.5 mA, so the drops are 1.5 V, 3.0 V and 4.5 V. Each resistor&rsquo;s share is proportional to its resistance (a voltage divider).</li>
+      <li>The graph&rsquo;s horizontal axis is position around the loop, not distance. Wires are drawn as level sections because an ideal wire has no voltage drop.</li>
+      <li>The fault-finder cases show the patterns students will meet on real boards: 0 V across a part that should drop voltage (shorted), the full supply voltage across one part (open), and readings that don&rsquo;t add up (measurement error).</li>
+      <li>Suggested tie-in: before students power up their own design project, have them predict each drop, measure it, and check that the loop adds to zero.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

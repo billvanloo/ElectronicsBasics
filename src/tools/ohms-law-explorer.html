@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Ohm's Law Explorer</title>
+<meta name="description" content="Adjust a bench power supply and a resistor, collect voltage and current data, and find the relationship between them on a graph.">
+<style>
+  .layout > * { min-width: 0; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .psu { background: #2d3239; border-radius: 12px; padding: 12px; color: #e9edf2; }
+  .psu svg { display: block; width: 100%; height: auto; }
+  .controls { display: grid; gap: 12px; margin-top: 14px; }
+  .readouts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .readout { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); }
+  .readout .k { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 700; }
+  .readout .v { font: 700 1.2rem var(--mono); }
+  .graph-wrap { background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+  .graph-wrap svg { display: block; width: 100%; height: auto; }
+  .axis text { font: 600 12px var(--font); fill: #4b5667; }
+  .axis .title { font: 700 13px var(--font); fill: #1b2330; }
+  .gridline { stroke: #e6e9ee; }
+  .steps { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; }
+  .steps li { display: flex; gap: 10px; align-items: flex-start; }
+  .steps .box { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: .8rem; font-weight: 800; margin-top: 1px; }
+  .steps li.done .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .steps li.done .box::before { content: "\2713"; }
+  .steps li.done .txt { color: var(--ink-2); }
+  .practice { display: grid; gap: 12px; }
+  .problem { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+  .problem .ans { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .problem input { width: 7em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); background: var(--surface); }
+  .series-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .9rem; margin-top: 8px; }
+  .series-key span { display: inline-flex; gap: 6px; align-items: center; }
+  .series-key svg { width: 16px; height: 16px; }
+  .warn-slot:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Ohm&rsquo;s Law Explorer</h1>
+      <p class="lede">Set the power supply and choose a resistor. Add data points to the graph, then find what the slope of the line tells you.</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-psu">
+        <h2 id="h-psu">Bench power supply</h2>
+        <div class="psu" id="psu"></div>
+        <div class="controls" id="controls"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-circ">
+        <h2 id="h-circ">Circuit</h2>
+        <div class="stage" id="stage"></div>
+        <div class="readouts" id="readouts"></div>
+        <div class="warn-slot" id="warn" style="margin-top:10px"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn btn-primary" id="add" type="button">Add point to graph</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-steps">
+        <h2 id="h-steps">Steps</h2>
+        <ol class="steps" id="steps"></ol>
+        <div id="predict" style="margin-top:12px"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-graph">
+        <div class="stage-title"><h2 id="h-graph" style="margin:0">Voltage vs. current</h2>
+          <label class="row small" style="gap:6px;font-weight:600"><input type="checkbox" id="fit" style="width:18px;height:18px;accent-color:var(--accent)"> Show line of best fit</label></div>
+        <div class="graph-wrap" id="graph"></div>
+        <div class="series-key" id="key"></div>
+        <p class="small muted" id="graphSummary" aria-live="polite" style="margin-top:8px"></p>
+        <div id="slopeQ"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-data">
+        <div class="stage-title"><h2 id="h-data" style="margin:0">Data table</h2>
+          <span class="row"><button class="btn btn-small" id="csv" type="button">Download CSV</button><button class="btn btn-small" id="clear" type="button">Clear data</button></span></div>
+        <div class="table-wrap"><table class="data" id="table">
+          <caption class="sr-only">Collected data points</caption>
+          <thead><tr><th>Set</th><th class="num">Resistor (&Omega;)</th><th class="num">Voltage (V)</th><th class="num">Current (mA)</th><th class="num">V &divide; I (&Omega;)</th></tr></thead>
+          <tbody></tbody></table></div>
+      </section>
+      <section class="panel" aria-labelledby="h-prac">
+        <h2 id="h-prac">Practice: find the missing value</h2>
+        <div class="practice" id="practice"></div>
+      </section>
+    </div>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, sig, slider, Predict, feedback, about, announce, downloadCSV, fmtR } = UI;
+  const S = Schem;
+  const RES = [100, 220, 330, 470, 680, 1000];
+  const RATING = 0.25;   // W
+  const st = { Vset: 3, Ilim: 0.2, R: 330, points: [], fit: false, predLocked: false, revealed: false, steepAnswered: false };
+  let op;   // operating point
+
+  function solve() {
+    const r = Engine.solve([{ id: 'PS', type: 'vsource', pos: 'p', neg: 'g', V: st.Vset, Ilim: st.Ilim }, { id: 'R', type: 'resistor', a: 'p', b: 'g', R: st.R }]);
+    op = { V: r.V.p, I: r.I.R, P: r.P.R, mode: r.mode.PS };
+  }
+
+  /* ---------- bench supply illustration ---------- */
+  const psu = S.svg(380, 150, { role: 'img' });
+  $('#psu').append(psu);
+  function drawPSU() {
+    psu.replaceChildren();
+    const E = (t, a, p = psu) => S.el(t, a, p);
+    E('rect', { x: 0, y: 0, width: 380, height: 150, rx: 10, fill: '#3a4049' });
+    const disp = (x, label, val, unit) => {
+      E('rect', { x, y: 14, width: 120, height: 54, rx: 6, fill: '#0f1a12', stroke: '#1d2b20' });
+      E('text', { x: x + 112, y: 52, 'text-anchor': 'end', text: val, style: 'font:700 26px ui-monospace,Menlo,Consolas,monospace;fill:#7dff9b' });
+      E('text', { x: x + 112, y: 64, 'text-anchor': 'end', text: unit, style: 'font:700 9px system-ui,sans-serif;fill:#7dff9b;opacity:.8' });
+      E('text', { x: x + 60, y: 84, 'text-anchor': 'middle', text: label, style: 'font:700 10px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.08em' });
+    };
+    disp(14, 'VOLTAGE', op.V.toFixed(2), 'V');
+    disp(146, 'CURRENT', op.I.toFixed(3), 'A');
+    const knob = (cx, frac, label) => {
+      E('circle', { cx, cy: 118, r: 19, fill: '#1e2227', stroke: '#111' });
+      E('circle', { cx, cy: 118, r: 14, fill: '#4a515b' });
+      const a = (-135 + 270 * frac) * Math.PI / 180;
+      E('path', { d: `M${cx} 118 L${cx + Math.sin(a) * 13} ${118 - Math.cos(a) * 13}`, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' });
+      E('text', { x: cx + 26, y: 122, text: label, style: 'font:700 9.5px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.06em' });
+    };
+    knob(36, st.Vset / 12, 'VOLTAGE');
+    knob(168, (st.Ilim - 0.01) / 0.49, 'CURRENT');
+    // CV / CC lamps
+    const lamp = (y, on, color, label) => {
+      if (on) E('circle', { cx: 290, cy: y, r: 10, fill: color, opacity: .3 });
+      E('circle', { cx: 290, cy: y, r: 6, fill: on ? color : '#222', stroke: '#111' });
+      E('text', { x: 302, y: y + 4, text: label + (on ? ' ON' : ''), style: `font:700 10px system-ui,sans-serif;fill:${on ? '#fff' : '#9aa3ad'}` });
+    };
+    lamp(30, op.mode === 'CV', '#43d36b', 'CV');
+    lamp(54, op.mode === 'CC', '#ff5a4f', 'CC');
+    // output terminals
+    E('text', { x: 316, y: 98, 'text-anchor': 'middle', text: 'OUTPUT', style: 'font:700 9.5px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.08em' });
+    E('circle', { cx: 296, cy: 120, r: 11, fill: '#d63b32', stroke: '#7a1b16', 'stroke-width': 2 });
+    E('circle', { cx: 336, cy: 120, r: 11, fill: '#1f2328', stroke: '#000', 'stroke-width': 2 });
+    E('text', { x: 296, y: 125, 'text-anchor': 'middle', text: '+', style: 'font:800 14px system-ui;fill:#fff' });
+    E('text', { x: 336, y: 125, 'text-anchor': 'middle', text: '−', style: 'font:800 14px system-ui;fill:#fff' });
+    psu.setAttribute('aria-label', `Bench power supply. Output ${op.V.toFixed(2)} volts, ${(op.I * 1000).toFixed(1)} milliamps. Mode: ${op.mode === 'CC' ? 'constant current (current limit reached)' : 'constant voltage'}.`);
+  }
+
+  /* ---------- circuit schematic ---------- */
+  const circ = S.svg(420, 230, { role: 'img' });
+  $('#stage').append(circ);
+  function drawCircuit() {
+    circ.replaceChildren();
+    const VM = 12, cP = S.vColor(op.V, VM), cG = S.vColor(0, VM);
+    S.battery(circ, 60, 170, 60, 70, { cneg: cG, cpos: cP, markSide: 'left' });
+    S.label(circ, 96, 112, 'Power', { anchor: 'start', cls: 'lbl-sm' });
+    S.label(circ, 96, 126, 'supply', { anchor: 'start', cls: 'lbl-sm' });
+    S.wire(circ, [[60, 70], [60, 30], [120, 30]], cP);
+    S.meter(circ, 120, 30, 200, 30, 'A', { ca: cP, cb: cP });
+    S.wire(circ, [[200, 30], [260, 30], [260, 60]], cP);
+    const hot = op.P > RATING;
+    if (hot) S.el('ellipse', { cx: 260, cy: 120, rx: 26, ry: 48, fill: '#ff7a1a', opacity: .28 }, circ);
+    S.resistor(circ, 260, 60, 260, 180, { ca: cP, cb: cG });
+    S.label(circ, 232, 116, 'R', { anchor: 'end' });
+    S.label(circ, 232, 132, fmtR(st.R), { anchor: 'end', cls: 'lbl-val' });
+    S.wire(circ, [[260, 180], [260, 210], [60, 210], [60, 170]], cG);
+    // voltmeter across R
+    S.wire(circ, [[260, 50], [330, 50], [330, 80]], cP);
+    S.meter(circ, 330, 80, 330, 160, 'V', { ca: cP, cb: cG });
+    S.wire(circ, [[330, 160], [330, 195], [260, 195]], cG);
+    S.junction(circ, 260, 50, cP); S.junction(circ, 260, 195, cG);
+    S.vtag(circ, 160, 62, (op.I * 1000).toFixed(1) + ' mA');
+    S.vtag(circ, 384, 120, op.V.toFixed(2) + ' V');
+    circ.setAttribute('aria-label', `Circuit: the power supply, an ammeter, and a ${st.R} ohm resistor in series, with a voltmeter across the resistor. The ammeter reads ${(op.I * 1000).toFixed(1)} milliamps and the voltmeter reads ${op.V.toFixed(2)} volts.`);
+  }
+
+  /* ---------- readouts + warnings ---------- */
+  function drawReadouts() {
+    const ro = (k, v) => h('div', { class: 'readout' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
+    $('#readouts').replaceChildren(ro('Voltage across R', op.V.toFixed(2) + ' V'), ro('Current', (op.I * 1000).toFixed(1) + ' mA'), ro('Power in R', sig(op.P, 3) + ' W'));
+    const w = $('#warn'); w.replaceChildren();
+    if (op.P > RATING) w.append(feedback('warn', 'Over the ¼ W rating', ` The resistor is using ${sig(op.P, 2)} W. A real ¼ W resistor would get very hot and could burn out. Lower the voltage, use a larger resistor, or set the current limit lower.`));
+    if (op.mode === 'CC') w.append(feedback('info', 'Current limit reached (CC mode)', ` The supply lowered its voltage to ${op.V.toFixed(2)} V to keep the current at ${(st.Ilim * 1000).toFixed(0)} mA. Points you add now still follow V = I × R.`));
+  }
+
+  /* ---------- controls ---------- */
+  const sV = slider({ id: 'sV', label: 'Voltage knob', min: 0, max: 12, step: 0.5, value: st.Vset, format: v => v.toFixed(1) + ' V', onInput: v => { st.Vset = v; update(); } });
+  const sI = slider({ id: 'sI', label: 'Current limit knob', min: 0.01, max: 0.5, step: 0.01, value: st.Ilim, format: v => (v * 1000).toFixed(0) + ' mA', onInput: v => { st.Ilim = v; update(); } });
+  const sR = slider({ id: 'sR', label: 'Resistor', values: RES, value: st.R, format: v => fmtR(v), onInput: v => { st.R = v; update(); } });
+  $('#controls').append(sV.el, sI.el, sR.el, h('p', { class: 'small muted', style: 'margin:0' }, 'Resistors are rated ¼ W. Arrow keys work on every slider.'));
+
+  /* ---------- graph ---------- */
+  const COLORS = ['#1f66c9', '#d55e00', '#17803d', '#7b3fe4', '#b3261e', '#00798c'];
+  const G = { w: 560, h: 380, l: 64, r: 20, t: 20, b: 56 };
+  const gsvg = S.svg(G.w, G.h, { role: 'img' });
+  $('#graph').append(gsvg);
+  const seriesOf = () => { const m = []; st.points.forEach(p => { if (!m.includes(p.R)) m.push(p.R); }); return m; };
+  function niceMax(v) {
+    const steps = [5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 125, 150];
+    for (const s of steps) if (v <= s) return s;
+    return Math.ceil(v / 50) * 50;
+  }
+  function marker(parent, kind, x, y, color, hollow) {
+    const a = { fill: hollow ? '#fff' : color, stroke: color, 'stroke-width': 2 };
+    if (kind === 0) return S.el('circle', { cx: x, cy: y, r: 5.5, ...a }, parent);
+    if (kind === 1) return S.el('rect', { x: x - 5, y: y - 5, width: 10, height: 10, ...a }, parent);
+    if (kind === 2) return S.el('path', { d: `M${x} ${y - 6.5} L${x + 6} ${y + 4.5} L${x - 6} ${y + 4.5} Z`, ...a }, parent);
+    if (kind === 3) return S.el('path', { d: `M${x} ${y - 7} L${x + 7} ${y} L${x} ${y + 7} L${x - 7} ${y} Z`, ...a }, parent);
+    if (kind === 4) return S.el('path', { d: `M${x} ${y + 6.5} L${x + 6} ${y - 4.5} L${x - 6} ${y - 4.5} Z`, ...a }, parent);
+    return S.el('path', { d: `M${x - 6} ${y - 6} L${x + 6} ${y + 6} M${x + 6} ${y - 6} L${x - 6} ${y + 6}`, ...a, 'stroke-width': 3 }, parent);
+  }
+  function fitSlope(pts) {   // least squares through the origin: V = m * I
+    let sxy = 0, sxx = 0; pts.forEach(p => { sxy += p.I * p.V; sxx += p.I * p.I; });
+    return sxx > 0 ? sxy / sxx : NaN;
+  }
+  function drawGraph() {
+    gsvg.replaceChildren();
+    const ser = seriesOf();
+    const maxI = niceMax(Math.max(10, op.I * 1000, ...st.points.map(p => p.I * 1000)) * 1.02);
+    const X = i => G.l + (i / maxI) * (G.w - G.l - G.r), Y = v => G.h - G.b - (v / 12) * (G.h - G.t - G.b);
+    const ax = S.el('g', { class: 'axis' }, gsvg);
+    const nx = maxI <= 15 ? maxI / 5 : maxI / 5;
+    for (let k = 0; k <= 5; k++) {
+      const i = k * nx, x = X(i);
+      S.el('line', { x1: x, x2: x, y1: Y(0), y2: Y(12), class: 'gridline' }, ax);
+      S.el('text', { x, y: Y(0) + 18, 'text-anchor': 'middle', text: Number.isInteger(i) ? i : i.toFixed(1) }, ax);
+    }
+    for (let v = 0; v <= 12; v += 2) {
+      S.el('line', { x1: X(0), x2: X(maxI), y1: Y(v), y2: Y(v), class: 'gridline' }, ax);
+      S.el('text', { x: X(0) - 8, y: Y(v) + 4, 'text-anchor': 'end', text: v }, ax);
+    }
+    S.el('path', { d: `M${X(0)} ${Y(12)} V${Y(0)} H${X(maxI)}`, stroke: '#1b2330', 'stroke-width': 1.5, fill: 'none' }, ax);
+    S.el('text', { x: (X(0) + X(maxI)) / 2, y: G.h - 14, 'text-anchor': 'middle', class: 'title', text: 'Current, I (mA)' }, ax);
+    S.el('text', { x: 18, y: (Y(0) + Y(12)) / 2, 'text-anchor': 'middle', class: 'title', transform: `rotate(-90 18 ${(Y(0) + Y(12)) / 2})`, text: 'Voltage, V (V)' }, ax);
+    const clip = S.el('clipPath', { id: 'plotclip' }, gsvg);
+    S.el('rect', { x: X(0), y: Y(12), width: X(maxI) - X(0), height: Y(0) - Y(12) }, clip);
+    // fit lines
+    if (st.fit) ser.forEach((R, k) => {
+      const pts = st.points.filter(p => p.R === R);
+      if (pts.length < 2) return;
+      const m = fitSlope(pts);    // V per A
+      const iEnd = Math.min(maxI / 1000, 12 / m);
+      S.el('line', { x1: X(0), y1: Y(0), x2: X(iEnd * 1000), y2: Y(m * iEnd), stroke: COLORS[k % 6], 'stroke-width': 2.5, 'stroke-dasharray': k % 2 ? '8 5' : null, 'clip-path': 'url(#plotclip)' }, gsvg);
+    });
+    // points
+    st.points.forEach(p => { const k = ser.indexOf(p.R); marker(gsvg, k % 6, X(p.I * 1000), Y(p.V), COLORS[k % 6], false); });
+    // live operating point (hollow)
+    marker(gsvg, 0, X(op.I * 1000), Y(op.V), '#1b2330', true).setAttribute('stroke-dasharray', '2 2');
+    // key
+    $('#key').replaceChildren(...ser.map((R, k) => {
+      const s = S.svg(16, 16); marker(s, k % 6, 8, 8, COLORS[k % 6], false);
+      const pts = st.points.filter(p => p.R === R);
+      const slope = st.fit && pts.length >= 2 ? ` — slope ${Math.round(fitSlope(pts))} Ω` : '';
+      return h('span', {}, s, `Set ${k + 1}: ${fmtR(R)}`, slope ? h('strong', {}, slope) : null);
+    }), h('span', {}, (() => { const s = S.svg(16, 16); marker(s, 0, 8, 8, '#1b2330', true); return s; })(), 'Current setting (not yet added)'));
+    // summary for screen readers and everyone
+    const parts = ser.map((R, k) => {
+      const pts = st.points.filter(p => p.R === R);
+      const m = fitSlope(pts);
+      return `Set ${k + 1} (${R} ohms): ${pts.length} point${pts.length === 1 ? '' : 's'}` + (pts.length >= 2 ? `, a straight line through zero with slope about ${Math.round(m)} ohms` : '');
+    });
+    const sum = parts.length ? parts.join('. ') + '.' : 'No points yet. The hollow marker shows the current setting.';
+    $('#graphSummary').textContent = sum;
+    gsvg.setAttribute('aria-label', 'Graph of voltage (vertical, volts) against current (horizontal, milliamps). ' + sum);
+  }
+
+  /* ---------- data table ---------- */
+  function drawTable() {
+    const ser = seriesOf();
+    $('#table tbody').replaceChildren(...st.points.map(p => h('tr', {},
+      h('td', {}, 'Set ' + (ser.indexOf(p.R) + 1)), h('td', { class: 'num' }, p.R), h('td', { class: 'num' }, p.V.toFixed(2)),
+      h('td', { class: 'num' }, (p.I * 1000).toFixed(2)), h('td', { class: 'num' }, p.I > 0 ? Math.round(p.V / p.I) : '—'))));
+    if (!st.points.length) $('#table tbody').append(h('tr', {}, h('td', { colspan: 5, class: 'muted' }, 'No data yet. Press “Add point to graph”.')));
+  }
+
+  /* ---------- steps ---------- */
+  const STEPS = [
+    'Make a prediction (below).',
+    'Add at least 4 points with the same resistor, using different voltages.',
+    'Turn on “Show line of best fit” and compare its slope with the resistor value.',
+    'Choose a different resistor and add at least 4 more points.',
+    'Answer: which line is steeper, and why?'
+  ];
+  function stepState() {
+    const ser = seriesOf();
+    const counts = ser.map(R => st.points.filter(p => p.R === R).length);
+    return [st.predLocked, counts[0] >= 4, st.fit && counts[0] >= 2, counts.filter(c => c >= 4).length >= 2, st.steepAnswered];
+  }
+  function drawSteps() {
+    const done = stepState();
+    $('#steps').replaceChildren(...STEPS.map((s, i) => h('li', { class: done[i] ? 'done' : '' }, h('span', { class: 'box', 'aria-hidden': 'true' }, done[i] ? '' : i + 1), h('span', { class: 'txt' }, s, h('span', { class: 'sr-only' }, done[i] ? ' (done)' : '')))));
+  }
+
+  const predict = new Predict($('#predict'), {
+    question: 'If you double the voltage across the same resistor, the current will…',
+    choices: ['double', 'be cut in half', 'stay the same'],
+    onLock: () => { st.predLocked = true; drawSteps(); maybeReveal(); }
+  });
+  function maybeReveal() {
+    if (st.revealed || !st.predLocked) return;
+    const R = seriesOf()[0];
+    const pts = st.points.filter(p => p.R === R && p.I > 0);
+    if (pts.length < 4) return;
+    st.revealed = true;
+    const a = pts.reduce((x, y) => (y.V < x.V ? y : x)), b = pts.reduce((x, y) => (y.V > x.V ? y : x));
+    predict.reveal(0, `In your data, going from ${a.V.toFixed(1)} V to ${b.V.toFixed(1)} V (×${(b.V / a.V).toFixed(1)}) changed the current from ${(a.I * 1000).toFixed(1)} mA to ${(b.I * 1000).toFixed(1)} mA (×${(b.I / a.I).toFixed(1)}). With the resistance fixed, current is proportional to voltage.`);
+  }
+
+  // steeper-line question
+  function drawSlopeQ() {
+    const box = $('#slopeQ');
+    const ser = seriesOf();
+    const ready = ser.filter(R => st.points.filter(p => p.R === R).length >= 2).length >= 2;
+    if (!ready) { box.replaceChildren(); return; }
+    if (box.dataset.built === ser.join(',')) return;
+    box.dataset.built = ser.join(',');
+    const big = Math.max(...ser), small = Math.min(...ser);
+    const choices = [`The line for the larger resistor (${fmtR(big)})`, `The line for the smaller resistor (${fmtR(small)})`, 'They have the same slope'];
+    const name = 'steep';
+    const radios = choices.map((c, i) => h('input', { type: 'radio', name, value: i }));
+    const out = h('div', { style: 'margin-top:8px' });
+    const btn = h('button', { class: 'btn btn-small btn-primary', type: 'button' }, 'Check');
+    btn.addEventListener('click', () => {
+      const i = radios.findIndex(r => r.checked);
+      if (i < 0) return;
+      const ok = i === 0;
+      out.replaceChildren(feedback(ok ? 'ok' : 'bad', null, ok
+        ? ` The slope of a V-vs-I line is V ÷ I, which is the resistance. More resistance means more volts are needed for each milliamp, so the line is steeper.`
+        : ` Compare the two lines: for the same current, which one needs more voltage? The slope (V ÷ I) equals the resistance.`));
+      if (ok) { st.steepAnswered = true; drawSteps(); }
+    });
+    box.replaceChildren(h('div', { class: 'predict', style: 'margin-top:12px' }, h('fieldset', {}, h('legend', {}, 'Which line is steeper?'),
+      h('div', { class: 'choices' }, choices.map((c, i) => h('label', { class: 'choice' }, radios[i], h('span', {}, c))))), btn, out));
+  }
+
+  /* ---------- add / clear / csv ---------- */
+  $('#add').addEventListener('click', () => {
+    const p = { R: st.R, V: +op.V.toFixed(2), I: op.I };
+    if (st.points.some(q => q.R === p.R && Math.abs(q.V - p.V) < 1e-6)) { announce('That point is already on the graph. Change the voltage first.'); return; }
+    st.points.push(p);
+    announce(`Added: ${p.V.toFixed(2)} volts, ${(p.I * 1000).toFixed(1)} milliamps, with the ${p.R} ohm resistor.`);
+    renderData(); maybeReveal();
+  });
+  $('#clear').addEventListener('click', () => { st.points = []; renderData(); announce('Data cleared.'); });
+  $('#fit').addEventListener('change', e => { st.fit = e.target.checked; drawGraph(); drawSteps(); });
+  $('#csv').addEventListener('click', () => {
+    const ser = seriesOf();
+    downloadCSV('ohms-law-data.csv', [['Set', 'Resistor (ohm)', 'Voltage (V)', 'Current (mA)', 'V/I (ohm)'],
+      ...st.points.map(p => ['Set ' + (ser.indexOf(p.R) + 1), p.R, p.V.toFixed(2), (p.I * 1000).toFixed(2), p.I > 0 ? Math.round(p.V / p.I) : ''])]);
+  });
+  function renderData() { drawGraph(); drawTable(); drawSteps(); drawSlopeQ(); }
+
+  /* ---------- practice problems ---------- */
+  const PROBLEMS = [
+    { q: 'A 470 Ω resistor is connected to 9.0 V. What is the current?', unit: 'mA', ans: 9 / 470 * 1000, hint: 'I = V ÷ R. Convert amps to milliamps by multiplying by 1000.' },
+    { q: 'A current of 25 mA flows through a 220 Ω resistor. What is the voltage across it?', unit: 'V', ans: 0.025 * 220, hint: 'V = I × R, with I in amps (25 mA = 0.025 A).' },
+    { q: 'A resistor has 6.0 V across it and 12 mA through it. What is its resistance?', unit: 'Ω', ans: 6 / 0.012, hint: 'R = V ÷ I, with I in amps (12 mA = 0.012 A).' }
+  ];
+  PROBLEMS.forEach((p, i) => {
+    const id = 'pr' + i;
+    const input = h('input', { id, type: 'text', inputmode: 'decimal', autocomplete: 'off' });
+    const out = h('div');
+    const check = () => {
+      const v = parseFloat(input.value.replace(',', '.'));
+      if (!isFinite(v)) { out.replaceChildren(feedback('bad', 'Enter a number', ' Type just the number. The unit is already shown.')); return; }
+      const rel = x => Math.abs(v - x) / Math.abs(x);
+      if (rel(p.ans) <= 0.02) out.replaceChildren(feedback('ok', null, ` ${sig(p.ans, 3)} ${p.unit}.`));
+      else if (rel(p.ans * 1000) <= 0.02 || rel(p.ans / 1000) <= 0.02) out.replaceChildren(feedback('bad', 'Off by a factor of 1000', ' Check your units: milliamps vs. amps, or ohms vs. kilohms. ' + p.hint));
+      else out.replaceChildren(feedback('bad', null, ' ' + p.hint));
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+    $('#practice').append(h('div', { class: 'problem' }, h('label', { for: id }, h('strong', {}, (i + 1) + '. '), p.q),
+      h('div', { class: 'ans' }, input, h('span', { style: 'font-weight:700' }, p.unit), h('button', { class: 'btn btn-small', type: 'button', onclick: check }, 'Check')), out));
+  });
+
+  function update() { solve(); drawPSU(); drawCircuit(); drawReadouts(); drawGraph(); }
+  update(); drawTable(); drawSteps();
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> With the resistance fixed, current is proportional to voltage (Ohm&rsquo;s law, V = I &times; R). On a voltage-vs-current graph, the slope is the resistance.</p>
+    <p><strong>Time:</strong> about 5 minutes, plus the practice problems.</p>
+    <ul>
+      <li><strong>Axis choice:</strong> current is on the horizontal axis and voltage on the vertical axis, so the slope (V &divide; I) reads directly in ohms. This flips the usual &ldquo;independent variable on x&rdquo; habit on purpose; ask students why it is helpful here.</li>
+      <li>The supply works like a typical bench supply. The VOLTAGE knob sets the output voltage, and the CURRENT knob sets a current limit. When the circuit tries to draw more than the limit, the supply switches to constant-current (CC) mode and lowers its voltage. Points taken in CC mode still lie on the same line.</li>
+      <li>All resistors are rated &frac14; W. The tool warns when P = V &times; I goes over that rating (for example, 12 V across 330 &Omega; is about 0.44 W). This makes a good lead-in to choosing safe component values.</li>
+      <li>The meters here are ideal, so V &divide; I equals the resistor value exactly. With real parts and meters, expect differences of a few percent.</li>
+      <li>Suggested tie-in: repeat the same procedure on a breadboard with a lab supply and a multimeter, then compare the slopes.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ===== Electrical Circuits Interactives: shared styles ===== */
+:root {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #1b2330;
+  --ink-2: #4b5667;
+  --line: #d3d9e1;
+  --accent: #1f66c9;
+  --accent-hover: #1956ab;
+  --accent-ink: #ffffff;
+  --focus: #1f66c9;
+  --ok: #17703a;
+  --ok-bg: #e5f3ea;
+  --bad: #b3261e;
+  --bad-bg: #fbe8e6;
+  --warn: #7f4d00;
+  --warn-bg: #fff2d4;
+  --hl: #7b3fe4;            /* highlight (mapping, selection) */
+  --stage: #ffffff;         /* circuit canvas: always light, like a workbench sheet */
+  --stage-grid: #edf0f4;
+  --stage-ink: #1b2330;
+  --v-high: #d55e00;        /* warm = high potential */
+  --v-mid: #a69c92;
+  --v-low: #0072b2;         /* cool = low potential */
+  --wire-dead: #8c94a0;
+  --dot: #ffd21f;
+  --dot-edge: #3a2f00;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(20 30 50 / .06), 0 4px 14px rgb(20 30 50 / .06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11151b;
+    --surface: #1a2029;
+    --surface-2: #222a35;
+    --ink: #e7ebf1;
+    --ink-2: #a8b2c1;
+    --line: #333e4c;
+    --accent: #5d9eff;
+    --accent-hover: #7fb2ff;
+    --accent-ink: #0a1322;
+    --focus: #7fb2ff;
+    --ok: #74d394;
+    --ok-bg: #16301f;
+    --bad: #ff8f86;
+    --bad-bg: #3a1c1a;
+    --warn: #ffc56b;
+    --warn-bg: #36290f;
+    --hl: #b892ff;
+    --stage: #f7f8fa;
+    --stage-grid: #e9ecf1;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 4px 14px rgb(0 0 0 / .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11151b; --surface: #1a2029; --surface-2: #222a35; --ink: #e7ebf1; --ink-2: #a8b2c1;
+  --line: #333e4c; --accent: #5d9eff; --accent-hover: #7fb2ff; --accent-ink: #0a1322; --focus: #7fb2ff;
+  --ok: #74d394; --ok-bg: #16301f; --bad: #ff8f86; --bad-bg: #3a1c1a; --warn: #ffc56b; --warn-bg: #36290f;
+  --hl: #b892ff; --stage: #f7f8fa; --stage-grid: #e9ecf1;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font);
+}
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .4em; text-wrap: balance; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 .75em; }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ----- Page frame ----- */
+.app { max-width: 1240px; margin: 0 auto; padding: 16px 16px 48px; }
+.app-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: end; justify-content: space-between; margin: 8px 0 16px; }
+.app-head .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+.eyebrow { font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { text-decoration: underline; }
+.head-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+}
+.panel + .panel { margin-top: 16px; }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.stack > * + * { margin-top: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+
+/* ----- Stage (circuit canvas) ----- */
+.stage {
+  background: var(--stage);
+  background-image: radial-gradient(var(--stage-grid) 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px;
+  color: var(--stage-ink);
+  overflow: hidden;
+}
+.stage svg { display: block; width: 100%; height: auto; }
+.stage svg text { pointer-events: none; }
+.stage-title { font-weight: 600; font-size: .95rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* ----- Buttons ----- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.2;
+  transition: background-color .15s, border-color .15s;
+}
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.seg button { min-height: 40px; padding: 6px 14px; border: 0; background: transparent; font-weight: 600; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+
+/* ----- Caption bar ----- */
+.caption {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #10161f; color: #f3f6fa; border-radius: 10px; padding: 10px 14px; min-height: 48px;
+  font-size: 1.02rem;
+}
+.caption .cc { flex: none; font: 700 .7rem/1 var(--font); border: 1.5px solid currentColor; border-radius: 4px; padding: 3px 4px; margin-top: 3px; opacity: .8; }
+.caption-text { flex: 1; }
+.transcript { margin-top: 8px; }
+.transcript ol { margin: 6px 0 0; padding-left: 1.4em; color: var(--ink-2); font-size: .92rem; }
+
+/* ----- Feedback ----- */
+.fb {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+  border: 2px solid; font-size: .98rem;
+}
+.fb-icon { flex: none; width: 24px; height: 24px; }
+.fb strong { display: block; }
+.fb.ok { border-style: solid; border-color: var(--ok); background: var(--ok-bg); }
+.fb.ok strong { color: var(--ok); }
+.fb.bad { border-style: dashed; border-color: var(--bad); background: var(--bad-bg); }
+.fb.bad strong { color: var(--bad); }
+.fb.warn { border-style: double; border-width: 4px; border-color: var(--warn); background: var(--warn-bg); }
+.fb.warn strong { color: var(--warn); }
+.fb.info { border-style: solid; border-width: 1px; border-color: var(--line); background: var(--surface-2); }
+
+/* ----- Predict card ----- */
+.predict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+.predict fieldset { border: 0; margin: 0; padding: 0; }
+.predict legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
+.predict .choices { display: grid; gap: 6px; margin-bottom: 10px; }
+.choice {
+  display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.predict.locked .choice { cursor: default; }
+.compare { display: grid; gap: 6px; grid-template-columns: auto 1fr; margin-top: 10px; font-size: .96rem; }
+.compare dt { font-weight: 700; }
+.compare dd { margin: 0; }
+.tag { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+
+/* ----- Legend ----- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--ink-2); align-items: center; }
+.legend .item { display: inline-flex; gap: 6px; align-items: center; }
+.legend svg { width: 34px; height: 16px; flex: none; }
+.vbar { width: 70px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--v-low), var(--v-mid), var(--v-high)); display: inline-block; }
+
+/* ----- Sliders (native range, styled) ----- */
+.field { display: grid; gap: 4px; }
+.field label, .field .label { font-weight: 600; font-size: .95rem; display: flex; justify-content: space-between; gap: 8px; }
+.field output, .field .val { font-family: var(--mono); font-weight: 600; }
+.field-row { display: flex; gap: 10px; align-items: center; }
+.field-row input[type="number"] { width: 6.5em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+input[type="range"] {
+  --slider-track-size: 8px; --slider-thumb-size: 22px; --slider-progress: 50%;
+  --slider-track-color: var(--line); --slider-fill-color: var(--accent);
+  appearance: none; -webkit-appearance: none; inline-size: 100%; block-size: 40px; margin: 0; padding: 0;
+  border: 0; background: transparent; cursor: pointer; flex: 1;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  block-size: var(--slider-track-size); border: 0; border-radius: 999px;
+  background: linear-gradient(to right, var(--slider-fill-color) var(--slider-progress), var(--slider-track-color) var(--slider-progress));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  border: 3px solid var(--surface); border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]::-moz-range-track { block-size: var(--slider-track-size); border: 0; border-radius: 999px; background: var(--slider-track-color); }
+input[type="range"]::-moz-range-progress { block-size: var(--slider-track-size); border-radius: 999px; background: var(--slider-fill-color); }
+input[type="range"]::-moz-range-thumb {
+  inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size); border: 3px solid var(--surface);
+  border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+
+/* ----- Tables ----- */
+.table-wrap { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: .94rem; }
+table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
+table.data th { font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+table.data td.num, table.data th.num { text-align: right; font-family: var(--mono); }
+table.data input { width: 6em; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; font-family: var(--mono); }
+
+/* ----- Teacher panel ----- */
+details.about { margin-top: 20px; }
+details.about > summary {
+  cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  list-style: none; padding: 0 4px;
+}
+details.about > summary::-webkit-details-marker { display: none; }
+details.about > summary::before { content: "+"; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); font-weight: 700; }
+details.about[open] > summary::before { content: "\2212"; }
+details.about .about-body { padding: 4px 4px 0 36px; color: var(--ink-2); }
+details.about .about-body ul { padding-left: 1.2em; margin: 0 0 .75em; }
+
+.app-foot { margin-top: 28px; font-size: .85rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+
+/* ----- SVG circuit parts (shared) ----- */
+.sym { fill: none; stroke: var(--stage-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sym-fill { fill: var(--stage-ink); stroke: none; }
+.wire { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.lbl { font: 700 13px var(--font); fill: var(--stage-ink); }
+.lbl-sm { font: 600 11px var(--font); fill: #4b5667; }
+.lbl-val { font: 600 12px var(--mono); fill: #4b5667; }
+.vtag rect { fill: #ffffff; stroke: #c9d0da; }
+.vtag text { font: 700 11.5px var(--mono); fill: #1b2330; }
+.dot { fill: var(--dot); stroke: var(--dot-edge); stroke-width: 1.2; }
+.arrowhead { fill: #1b2330; }
+.part-hit { fill: transparent; stroke: none; }
+.focusable { cursor: pointer; outline: none; }
+.focusable:focus-visible .focus-ring, .focusable.is-hl .focus-ring { stroke: var(--hl); stroke-width: 3.5; stroke-dasharray: 7 4; fill: rgb(123 63 228 / .08); }
+.focus-ring { fill: none; stroke: transparent; }
+.open-mark { fill: none; stroke: #b3261e; stroke-width: 2.4; stroke-dasharray: 5 4; }
+.open-label rect { fill: #fff; stroke: #b3261e; stroke-width: 1.6; }
+.open-label text { font: 800 11px var(--font); fill: #b3261e; letter-spacing: .05em; }
+.hatch-dead { stroke-dasharray: 2 6; }
+
+@media (max-width: 600px) {
+  .app { padding: 12px 16px 40px; }
+  .panel { padding: 12px; }
+}
+@media print {
+  .head-tools, .caption, .btn { display: none !important; }
+  .panel { box-shadow: none; }
+}
+
+</style>
+<title>Electrical Circuits Interactives</title>
+<meta name="description" content="Seven short, standalone interactives and animations for learning series and parallel circuits, Ohm's law, measurement and Kirchhoff's laws.">
+<style>
+  .groups { display: grid; gap: 22px; }
+  .group h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 0 0 10px; }
+  .tiles { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+  .tile { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
+  .tile:hover { border-color: var(--accent); }
+  @media (prefers-reduced-motion: no-preference) { .tile:hover { transform: translateY(-2px); } }
+  .tile .art { background: #fff; border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 1; display: grid; place-items: center; }
+  .tile .art svg { width: 78px; height: 78px; }
+  .tile h3 { margin: 0 0 4px; font-size: 1.08rem; color: var(--accent); }
+  .tile p { margin: 0 0 8px; font-size: .94rem; color: var(--ink-2); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .how { margin-top: 26px; }
+  .how ul { margin: 0; padding-left: 1.2em; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <h1>Electrical Circuits Interactives</h1>
+      <p class="lede">Seven short tools for learning how circuits work. Use them alongside breadboard builds and circuit simulations, not instead of them. Each tool works on its own and offline.</p>
+    </div>
+  </header>
+
+  <main class="groups">
+    <section class="group" aria-labelledby="g1">
+      <h2 id="g1">Circuit types</h2>
+      <div class="tiles">
+        <a class="tile" href="series-parallel-sorter.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="8" y="14" width="28" height="22" rx="3" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M44 14H72M44 36H72M44 14V36M58 14V36M72 14V36" stroke="#1b2330" stroke-width="3" fill="none"/><rect x="8" y="48" width="64" height="22" rx="4" fill="none" stroke="#7b3fe4" stroke-width="3" stroke-dasharray="6 4"/><path d="M30 59h20" stroke="#7b3fe4" stroke-width="3"/></svg></span>
+          <span><h3>Series vs. Parallel Sorter</h3><p>Sort nine circuit cards into series, parallel or combined by tracing their current paths.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">3&ndash;5 min</span></span></span>
+        </a>
+        <a class="tile" href="remove-a-bulb.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M10 20H70V62H10Z" fill="none" stroke="#d55e00" stroke-width="3"/><circle cx="40" cy="20" r="10" fill="#fff3b0" stroke="#1b2330" stroke-width="3"/><path d="M33 13l14 14M47 13L33 27" stroke="#1b2330" stroke-width="3"/><circle cx="40" cy="62" r="10" fill="#fff" stroke="#b3261e" stroke-width="3" stroke-dasharray="4 3"/></svg></span>
+          <span><h3>Remove a Bulb: Series vs. Parallel</h3><p>Predict, then take a bulb out of each circuit and see which paths keep working.</p><span class="meta"><span class="tag">Animation + interactive</span><span class="tag">about 1 min each</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g2">
+      <h2 id="g2">Modeling and testing circuits</h2>
+      <div class="tiles">
+        <a class="tile" href="breadboard-schematic-mapper.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="6" y="8" width="30" height="64" rx="4" fill="#f4f2eb" stroke="#c9c3b0" stroke-width="2"/><g fill="#3d3d3d"><rect x="12" y="16" width="4" height="4"/><rect x="19" y="16" width="4" height="4"/><rect x="26" y="16" width="4" height="4"/><rect x="12" y="26" width="4" height="4"/><rect x="19" y="26" width="4" height="4"/><rect x="26" y="26" width="4" height="4"/><rect x="12" y="36" width="4" height="4"/><rect x="19" y="36" width="4" height="4"/><rect x="26" y="36" width="4" height="4"/></g><rect x="9" y="24" width="24" height="8" rx="3" fill="rgb(123 63 228 / .25)" stroke="#7b3fe4" stroke-width="2" stroke-dasharray="3 2"/><path d="M36 28H50" stroke="#7b3fe4" stroke-width="2" stroke-dasharray="3 2"/><path d="M50 16V64H74" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M50 28l-5 3 10 4-10 4 5 3" fill="none" stroke="#1b2330" stroke-width="2.5"/></svg></span>
+          <span><h3>Breadboard-to-Schematic Mapper</h3><p>Match every part, wire and row of holes on a breadboard with its symbol and wire on the schematic.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">2&ndash;3 min</span></span></span>
+        </a>
+        <a class="tile" href="multimeter-placement-lab.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="18" y="6" width="44" height="68" rx="8" fill="#f2b81c"/><rect x="23" y="11" width="34" height="58" rx="5" fill="#2b2f36"/><rect x="27" y="15" width="26" height="14" rx="2" fill="#c9d4c1"/><circle cx="40" cy="44" r="9" fill="#3a4049"/><path d="M40 44l5-6" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="31" cy="62" r="3" fill="#d63b32"/><circle cx="49" cy="62" r="3" fill="#111" stroke="#888"/></svg></span>
+          <span><h3>Multimeter Placement Lab</h3><p>Set up a meter to measure voltage, current and resistance, and see what goes wrong with the wrong setup.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">3&ndash;5 min</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g3">
+      <h2 id="g3">Circuit relationships and Kirchhoff&rsquo;s laws</h2>
+      <div class="tiles">
+        <a class="tile" href="ohms-law-explorer.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M12 8V68H74" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M12 68L46 14" stroke="#d55e00" stroke-width="3"/><path d="M12 68L70 40" stroke="#1f66c9" stroke-width="3"/><circle cx="29" cy="41" r="4" fill="#d55e00"/><circle cx="41" cy="54" r="4" fill="#1f66c9"/><circle cx="56" cy="47" r="4" fill="#1f66c9"/></svg></span>
+          <span><h3>Ohm&rsquo;s Law Explorer</h3><p>Turn the knobs on a bench power supply, collect data, and find what the slope of a V&ndash;I graph means.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">about 5 min</span></span></span>
+        </a>
+        <a class="tile" href="current-at-a-junction.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M6 40H30M30 40L54 20H74M30 40L54 60H74" fill="none" stroke="#1b2330" stroke-width="3"/><circle cx="30" cy="40" r="4.5" fill="#1b2330"/><g fill="#ffd21f" stroke="#3a2f00" stroke-width="1.2"><circle cx="10" cy="40" r="3.5"/><circle cx="18" cy="40" r="3.5"/><circle cx="26" cy="40" r="3.5"/><circle cx="44" cy="28" r="3.5"/><circle cx="54" cy="20" r="3.5"/><circle cx="66" cy="20" r="3.5"/><circle cx="48" cy="55" r="3.5"/><circle cx="70" cy="60" r="3.5"/></g></svg></span>
+          <span><h3>Current at a Junction</h3><p>Watch current split at a junction and rejoin. The current in always equals the current out.</p><span class="meta"><span class="tag">Animation</span><span class="tag">about 40 s</span></span></span>
+        </a>
+        <a class="tile" href="walk-the-voltage-loop.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M8 70V8M8 70H74" fill="none" stroke="#1b2330" stroke-width="2.5"/><path d="M10 66L20 66L26 16L36 16L42 30L48 30L54 46L60 46L66 66L72 66" fill="none" stroke="#7b3fe4" stroke-width="3.5" stroke-linejoin="round"/><circle cx="51" cy="38" r="5" fill="#7b3fe4" stroke="#fff" stroke-width="2"/></svg></span>
+          <span><h3>Walk the Voltage Loop</h3><p>Walk a marker around a loop: up across the battery, down across each resistor, and back to where you started.</p><span class="meta"><span class="tag">Animation + interactive</span><span class="tag">2&ndash;3 min</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="panel how" aria-labelledby="g4">
+      <h2 id="g4">How these tools work</h2>
+      <ul>
+        <li>Moving dots show conventional current (+ to &minus;). Every dot is the same amount of charge and moves at the same speed, so closer dots mean more current.</li>
+        <li>Wire colors show voltage: warm colors for higher voltage, cool colors for lower. Values are always labeled too.</li>
+        <li>Most tools ask for a prediction before showing the answer.</li>
+        <li>Everything works by keyboard, has captions or text descriptions, and respects the &ldquo;reduce motion&rdquo; setting.</li>
+        <li>No accounts, no tracking, and nothing leaves the page. Each tool is a single HTML file.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="app-foot"><span>Electrical Circuits Interactives</span><span>Works offline. No data leaves this page.</span></footer>
+</div>
+</body>
+</html>

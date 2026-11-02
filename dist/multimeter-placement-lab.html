@@ -1,0 +1,1596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ===== Electrical Circuits Interactives: shared styles ===== */
+:root {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #1b2330;
+  --ink-2: #4b5667;
+  --line: #d3d9e1;
+  --accent: #1f66c9;
+  --accent-hover: #1956ab;
+  --accent-ink: #ffffff;
+  --focus: #1f66c9;
+  --ok: #17703a;
+  --ok-bg: #e5f3ea;
+  --bad: #b3261e;
+  --bad-bg: #fbe8e6;
+  --warn: #7f4d00;
+  --warn-bg: #fff2d4;
+  --hl: #7b3fe4;            /* highlight (mapping, selection) */
+  --stage: #ffffff;         /* circuit canvas: always light, like a workbench sheet */
+  --stage-grid: #edf0f4;
+  --stage-ink: #1b2330;
+  --v-high: #d55e00;        /* warm = high potential */
+  --v-mid: #a69c92;
+  --v-low: #0072b2;         /* cool = low potential */
+  --wire-dead: #8c94a0;
+  --dot: #ffd21f;
+  --dot-edge: #3a2f00;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(20 30 50 / .06), 0 4px 14px rgb(20 30 50 / .06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11151b;
+    --surface: #1a2029;
+    --surface-2: #222a35;
+    --ink: #e7ebf1;
+    --ink-2: #a8b2c1;
+    --line: #333e4c;
+    --accent: #5d9eff;
+    --accent-hover: #7fb2ff;
+    --accent-ink: #0a1322;
+    --focus: #7fb2ff;
+    --ok: #74d394;
+    --ok-bg: #16301f;
+    --bad: #ff8f86;
+    --bad-bg: #3a1c1a;
+    --warn: #ffc56b;
+    --warn-bg: #36290f;
+    --hl: #b892ff;
+    --stage: #f7f8fa;
+    --stage-grid: #e9ecf1;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 4px 14px rgb(0 0 0 / .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11151b; --surface: #1a2029; --surface-2: #222a35; --ink: #e7ebf1; --ink-2: #a8b2c1;
+  --line: #333e4c; --accent: #5d9eff; --accent-hover: #7fb2ff; --accent-ink: #0a1322; --focus: #7fb2ff;
+  --ok: #74d394; --ok-bg: #16301f; --bad: #ff8f86; --bad-bg: #3a1c1a; --warn: #ffc56b; --warn-bg: #36290f;
+  --hl: #b892ff; --stage: #f7f8fa; --stage-grid: #e9ecf1;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font);
+}
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .4em; text-wrap: balance; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 .75em; }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ----- Page frame ----- */
+.app { max-width: 1240px; margin: 0 auto; padding: 16px 16px 48px; }
+.app-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: end; justify-content: space-between; margin: 8px 0 16px; }
+.app-head .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+.eyebrow { font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { text-decoration: underline; }
+.head-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+}
+.panel + .panel { margin-top: 16px; }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.stack > * + * { margin-top: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+
+/* ----- Stage (circuit canvas) ----- */
+.stage {
+  background: var(--stage);
+  background-image: radial-gradient(var(--stage-grid) 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px;
+  color: var(--stage-ink);
+  overflow: hidden;
+}
+.stage svg { display: block; width: 100%; height: auto; }
+.stage svg text { pointer-events: none; }
+.stage-title { font-weight: 600; font-size: .95rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* ----- Buttons ----- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.2;
+  transition: background-color .15s, border-color .15s;
+}
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.seg button { min-height: 40px; padding: 6px 14px; border: 0; background: transparent; font-weight: 600; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+
+/* ----- Caption bar ----- */
+.caption {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #10161f; color: #f3f6fa; border-radius: 10px; padding: 10px 14px; min-height: 48px;
+  font-size: 1.02rem;
+}
+.caption .cc { flex: none; font: 700 .7rem/1 var(--font); border: 1.5px solid currentColor; border-radius: 4px; padding: 3px 4px; margin-top: 3px; opacity: .8; }
+.caption-text { flex: 1; }
+.transcript { margin-top: 8px; }
+.transcript ol { margin: 6px 0 0; padding-left: 1.4em; color: var(--ink-2); font-size: .92rem; }
+
+/* ----- Feedback ----- */
+.fb {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+  border: 2px solid; font-size: .98rem;
+}
+.fb-icon { flex: none; width: 24px; height: 24px; }
+.fb strong { display: block; }
+.fb.ok { border-style: solid; border-color: var(--ok); background: var(--ok-bg); }
+.fb.ok strong { color: var(--ok); }
+.fb.bad { border-style: dashed; border-color: var(--bad); background: var(--bad-bg); }
+.fb.bad strong { color: var(--bad); }
+.fb.warn { border-style: double; border-width: 4px; border-color: var(--warn); background: var(--warn-bg); }
+.fb.warn strong { color: var(--warn); }
+.fb.info { border-style: solid; border-width: 1px; border-color: var(--line); background: var(--surface-2); }
+
+/* ----- Predict card ----- */
+.predict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+.predict fieldset { border: 0; margin: 0; padding: 0; }
+.predict legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
+.predict .choices { display: grid; gap: 6px; margin-bottom: 10px; }
+.choice {
+  display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.predict.locked .choice { cursor: default; }
+.compare { display: grid; gap: 6px; grid-template-columns: auto 1fr; margin-top: 10px; font-size: .96rem; }
+.compare dt { font-weight: 700; }
+.compare dd { margin: 0; }
+.tag { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+
+/* ----- Legend ----- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--ink-2); align-items: center; }
+.legend .item { display: inline-flex; gap: 6px; align-items: center; }
+.legend svg { width: 34px; height: 16px; flex: none; }
+.vbar { width: 70px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--v-low), var(--v-mid), var(--v-high)); display: inline-block; }
+
+/* ----- Sliders (native range, styled) ----- */
+.field { display: grid; gap: 4px; }
+.field label, .field .label { font-weight: 600; font-size: .95rem; display: flex; justify-content: space-between; gap: 8px; }
+.field output, .field .val { font-family: var(--mono); font-weight: 600; }
+.field-row { display: flex; gap: 10px; align-items: center; }
+.field-row input[type="number"] { width: 6.5em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+input[type="range"] {
+  --slider-track-size: 8px; --slider-thumb-size: 22px; --slider-progress: 50%;
+  --slider-track-color: var(--line); --slider-fill-color: var(--accent);
+  appearance: none; -webkit-appearance: none; inline-size: 100%; block-size: 40px; margin: 0; padding: 0;
+  border: 0; background: transparent; cursor: pointer; flex: 1;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  block-size: var(--slider-track-size); border: 0; border-radius: 999px;
+  background: linear-gradient(to right, var(--slider-fill-color) var(--slider-progress), var(--slider-track-color) var(--slider-progress));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  border: 3px solid var(--surface); border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]::-moz-range-track { block-size: var(--slider-track-size); border: 0; border-radius: 999px; background: var(--slider-track-color); }
+input[type="range"]::-moz-range-progress { block-size: var(--slider-track-size); border-radius: 999px; background: var(--slider-fill-color); }
+input[type="range"]::-moz-range-thumb {
+  inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size); border: 3px solid var(--surface);
+  border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+
+/* ----- Tables ----- */
+.table-wrap { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: .94rem; }
+table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
+table.data th { font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+table.data td.num, table.data th.num { text-align: right; font-family: var(--mono); }
+table.data input { width: 6em; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; font-family: var(--mono); }
+
+/* ----- Teacher panel ----- */
+details.about { margin-top: 20px; }
+details.about > summary {
+  cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  list-style: none; padding: 0 4px;
+}
+details.about > summary::-webkit-details-marker { display: none; }
+details.about > summary::before { content: "+"; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); font-weight: 700; }
+details.about[open] > summary::before { content: "\2212"; }
+details.about .about-body { padding: 4px 4px 0 36px; color: var(--ink-2); }
+details.about .about-body ul { padding-left: 1.2em; margin: 0 0 .75em; }
+
+.app-foot { margin-top: 28px; font-size: .85rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+
+/* ----- SVG circuit parts (shared) ----- */
+.sym { fill: none; stroke: var(--stage-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sym-fill { fill: var(--stage-ink); stroke: none; }
+.wire { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.lbl { font: 700 13px var(--font); fill: var(--stage-ink); }
+.lbl-sm { font: 600 11px var(--font); fill: #4b5667; }
+.lbl-val { font: 600 12px var(--mono); fill: #4b5667; }
+.vtag rect { fill: #ffffff; stroke: #c9d0da; }
+.vtag text { font: 700 11.5px var(--mono); fill: #1b2330; }
+.dot { fill: var(--dot); stroke: var(--dot-edge); stroke-width: 1.2; }
+.arrowhead { fill: #1b2330; }
+.part-hit { fill: transparent; stroke: none; }
+.focusable { cursor: pointer; outline: none; }
+.focusable:focus-visible .focus-ring, .focusable.is-hl .focus-ring { stroke: var(--hl); stroke-width: 3.5; stroke-dasharray: 7 4; fill: rgb(123 63 228 / .08); }
+.focus-ring { fill: none; stroke: transparent; }
+.open-mark { fill: none; stroke: #b3261e; stroke-width: 2.4; stroke-dasharray: 5 4; }
+.open-label rect { fill: #fff; stroke: #b3261e; stroke-width: 1.6; }
+.open-label text { font: 800 11px var(--font); fill: #b3261e; letter-spacing: .05em; }
+.hatch-dead { stroke-dasharray: 2 6; }
+
+@media (max-width: 600px) {
+  .app { padding: 12px 16px 40px; }
+  .panel { padding: 12px; }
+}
+@media print {
+  .head-tools, .caption, .btn { display: none !important; }
+  .panel { box-shadow: none; }
+}
+
+</style>
+<title>Multimeter Placement Lab</title>
+<meta name="description" content="Set up a virtual multimeter and place its probes to measure voltage, current and resistance on a breadboard circuit.">
+<style>
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .layout > .panel + .panel { margin-top: 0; }
+  .layout > * { min-width: 0; }
+  @media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .meter-col { position: sticky; top: 12px; }
+  @media (max-width: 960px) { .meter-col { position: static; } }
+  .meter-svg { max-width: 300px; margin: 0 auto; }
+  .meter-svg svg { display: block; width: 100%; height: auto; }
+  .ctl { display: grid; gap: 10px; margin-top: 12px; }
+  .ctl .line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ctl .k { font-weight: 700; font-size: .92rem; min-width: 7.5em; }
+  .ctl select { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); flex: 1 1 12em; max-width: 100%; }
+  .seg button { min-width: 44px; }
+  .tp { cursor: pointer; }
+  .tp .ring { fill: #fff; stroke: #7b3fe4; stroke-width: 2.5; }
+  .tp:focus-visible .ring, .tp:hover .ring { stroke-width: 4; fill: #efe6ff; }
+  .tp .tag rect { fill: #fff; stroke: #7b3fe4; stroke-width: 1.3; }
+  .tp .tag text { font: 800 11px var(--font); fill: #5a2bb0; }
+  .tp:focus { outline: none; }
+  .tp:focus-visible .tag rect { stroke-width: 3; }
+  .circuit-ctl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .msg:empty { display: none; }
+  .tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .tasks li { display: flex; gap: 10px; align-items: center; }
+  .tasks .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: .8rem; font-weight: 800; flex: none; }
+  .tasks li.done .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .tasks li.done .box::before { content: "\2713"; }
+  .tasks li.done .t { color: var(--ink-2); }
+  .err-list { display: grid; gap: 6px; margin: 8px 0; }
+  .err-list label { display: flex; gap: 10px; align-items: center; min-height: 40px; }
+  .err-list input { width: 18px; height: 18px; accent-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Multimeter Placement Lab</h1>
+      <p class="lede">Measure voltage, current and resistance on a breadboard circuit. Choose the meter&rsquo;s mode, plug in the red lead, and place both probes. The meter tells you when a setup is wrong, and why.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <section class="panel" aria-labelledby="h-board">
+        <h2 id="h-board">Circuit: 9 V battery, switch SW1, R1 = 1.0 k&Omega;, R2 = 2.2 k&Omega; in series</h2>
+        <div class="stage" id="board"></div>
+        <div class="circuit-ctl" role="group" aria-label="Circuit controls">
+          <button class="btn btn-small" id="swBtn" type="button">Switch SW1: ON</button>
+          <button class="btn btn-small" id="g1Btn" type="button">Open gap 1 (lift jumper J1)</button>
+          <button class="btn btn-small" id="g2Btn" type="button">Open gap 2 (lift jumper J2)</button>
+        </div>
+        <p class="small muted" style="margin:10px 0 0">Click a purple test point to place the probe chosen under &ldquo;Click places.&rdquo; To measure current, open a gap first, then put the meter across the gap so the current must flow through it.</p>
+      </section>
+
+      <div class="meter-col">
+        <section class="panel" aria-labelledby="h-meter">
+          <h2 id="h-meter">Multimeter</h2>
+          <div class="meter-svg" id="meter"></div>
+          <div class="ctl">
+            <div class="line"><span class="k" id="lbl-dial">Dial</span><div class="seg" role="group" aria-labelledby="lbl-dial" id="dial"></div></div>
+            <div class="line"><span class="k" id="lbl-jack">Red lead jack</span><div class="seg" role="group" aria-labelledby="lbl-jack" id="jack"></div><span class="small muted">The black lead stays in COM.</span></div>
+            <div class="line"><label class="k" for="redSel">Red probe</label><select id="redSel"></select></div>
+            <div class="line"><label class="k" for="blackSel">Black probe</label><select id="blackSel"></select></div>
+            <div class="line"><span class="k" id="lbl-click">Click places</span><div class="seg" role="group" aria-labelledby="lbl-click" id="placing"></div><button class="btn btn-small" id="clearProbes" type="button">Remove probes</button></div>
+          </div>
+          <div class="msg" id="msg" style="margin-top:12px"></div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn btn-primary" id="record" type="button" disabled>Record reading</button>
+            <button class="btn btn-small" id="resetFuse" type="button" hidden>Replace fuse</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="layout" style="margin-top:16px">
+      <section class="panel" aria-labelledby="h-tasks">
+        <h2 id="h-tasks">Tasks</h2>
+        <ol class="tasks" id="tasks"></ol>
+        <p class="small muted" style="margin:10px 0 0">Type your predictions into the table first (use the labeled values and Ohm&rsquo;s law), then record a reading for each task.</p>
+      </section>
+      <section class="panel" aria-labelledby="h-data">
+        <div class="stage-title"><h2 id="h-data" style="margin:0">Data table</h2><button class="btn btn-small" id="csv" type="button">Download CSV</button></div>
+        <div class="table-wrap"><table class="data" id="table">
+          <caption class="sr-only">Predicted and measured values</caption>
+          <thead><tr><th>Quantity</th><th class="num">Predicted</th><th class="num">Measured</th><th>Unit</th><th class="num">% difference</th></tr></thead>
+          <tbody></tbody></table></div>
+        <div id="errors" style="margin-top:12px"></div>
+      </section>
+    </div>
+  </main>
+  <div id="about"></div>
+  <footer class="app-foot">
+  <span>Part of <a href="index.html">Electrical Circuits Interactives</a>. Current is shown as conventional current (+ to &minus;).</span>
+  <span>Works offline. No data leaves this page.</span>
+</footer>
+</div>
+<script>
+/* engine.js */
+/* ===== Circuit engine: DC nodal analysis (MNA) =====
+ * parts: array of
+ *   { id, type: 'resistor'|'lamp'|'wire'|'switch'|'ammeter'|'voltmeter', a, b, R?, closed? , removed? }
+ *   { id, type: 'vsource', pos, neg, V, Ilim? }     ideal source; optional current limit (CV/CC bench supply)
+ *   { id, type: 'led', a (anode), b (cathode), Vf?, Rs? }
+ * Result: { V:{node:volts}, I:{id:amps}, P:{id:watts}, mode:{id:'CV'|'CC'}, ok:true }
+ *   I for two-terminal parts = current flowing a -> b through the part.
+ *   I for a vsource = current leaving its + terminal into the circuit.
+ */
+(function (root) {
+  'use strict';
+  const R_WIRE = 1e-4;       // closed switch / wire
+  const R_AMMETER = 2;       // mA-range burden resistance
+  const R_VOLTMETER = 10e6;  // 10 MΩ input
+  const GMIN = 1e-12;
+
+  function lsolve(A, b) {
+    const n = b.length;
+    for (let c = 0; c < n; c++) {
+      let p = c, best = Math.abs(A[c][c]);
+      for (let r = c + 1; r < n; r++) { const v = Math.abs(A[r][c]); if (v > best) { best = v; p = r; } }
+      if (best < 1e-30) continue;
+      if (p !== c) { [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; }
+      for (let r = c + 1; r < n; r++) {
+        const f = A[r][c] / A[c][c];
+        if (!f) continue;
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    const x = new Array(n).fill(0);
+    for (let r = n - 1; r >= 0; r--) {
+      let s = b[r];
+      for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k];
+      x[r] = Math.abs(A[r][r]) < 1e-30 ? 0 : s / A[r][r];
+    }
+    return x;
+  }
+
+  function resistanceOf(p) {
+    switch (p.type) {
+      case 'wire': return R_WIRE;
+      case 'switch': return p.closed ? R_WIRE : null;
+      case 'ammeter': return p.R ?? R_AMMETER;
+      case 'voltmeter': return p.R ?? R_VOLTMETER;
+      case 'resistor': case 'lamp': return p.R;
+      default: return undefined;
+    }
+  }
+
+  function solve(parts, opts = {}) {
+    const active = parts.filter(p => !p.removed);
+    const sources = active.filter(p => p.type === 'vsource');
+    const ground = opts.ground || (sources[0] && sources[0].neg) || 'gnd';
+    const nodes = new Set();
+    for (const p of active) {
+      if (p.type === 'vsource') { nodes.add(p.pos); nodes.add(p.neg); }
+      else { nodes.add(p.a); nodes.add(p.b); }
+    }
+    nodes.delete(ground);
+    const names = [...nodes];
+    const idx = new Map(names.map((n, i) => [n, i]));
+    const N = names.length;
+
+    const ledState = new Map(active.filter(p => p.type === 'led').map(p => [p.id, false]));
+    const ccState = new Map(sources.map(s => [s.id, false]));
+    let result;
+
+    for (let iter = 0; iter < 25; iter++) {
+      const vs = sources.filter(s => !ccState.get(s.id));
+      const M = N + vs.length;
+      const A = Array.from({ length: M }, () => new Array(M).fill(0));
+      const z = new Array(M).fill(0);
+      const ix = n => (n === ground ? -1 : idx.get(n));
+      const stampG = (a, b, g) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) A[i][i] += g;
+        if (j >= 0) A[j][j] += g;
+        if (i >= 0 && j >= 0) { A[i][j] -= g; A[j][i] -= g; }
+      };
+      // current source of value I flowing from node a, through source, into node b (i.e. injected into b)
+      const stampI = (a, b, I) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) z[i] -= I;
+        if (j >= 0) z[j] += I;
+      };
+      for (let k = 0; k < N; k++) A[k][k] += GMIN;
+
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          if (ledState.get(p.id)) { const g = 1 / Rs; stampG(p.a, p.b, g); stampI(p.b, p.a, g * Vf); }
+          else stampG(p.a, p.b, 1e-9);
+          continue;
+        }
+        const R = resistanceOf(p);
+        if (R == null) continue;
+        stampG(p.a, p.b, 1 / Math.max(R, 1e-9));
+      }
+      vs.forEach((s, k) => {
+        const r = N + k, i = ix(s.pos), j = ix(s.neg);
+        if (i >= 0) { A[i][r] += 1; A[r][i] += 1; }
+        if (j >= 0) { A[j][r] -= 1; A[r][j] -= 1; }
+        z[r] = s.V;
+      });
+      for (const s of sources) if (ccState.get(s.id)) stampI(s.neg, s.pos, s.Ilim);
+
+      const x = lsolve(A, z);
+      const V = { [ground]: 0 };
+      names.forEach((n, i) => { V[n] = x[i]; });
+      const I = {}, P = {}, mode = {};
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        const vab = V[p.a] - V[p.b];
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          I[p.id] = ledState.get(p.id) ? (vab - Vf) / Rs : vab * 1e-9;
+        } else {
+          const R = resistanceOf(p);
+          I[p.id] = R == null ? 0 : vab / Math.max(R, 1e-9);
+        }
+        P[p.id] = vab * I[p.id];
+      }
+      vs.forEach((s, k) => { I[s.id] = -x[N + k]; mode[s.id] = 'CV'; });
+      for (const s of sources) if (ccState.get(s.id)) { I[s.id] = s.Ilim; mode[s.id] = 'CC'; }
+      for (const s of sources) P[s.id] = (V[s.pos] - V[s.neg]) * I[s.id];
+      result = { V, I, P, mode, ground, ok: true };
+
+      // update nonlinear states
+      let changed = false;
+      for (const p of active) {
+        if (p.type !== 'led') continue;
+        const on = ledState.get(p.id);
+        const vab = V[p.a] - V[p.b];
+        if (!on && vab > (p.Vf ?? 2.0) + 1e-6) { ledState.set(p.id, true); changed = true; }
+        else if (on && I[p.id] < 0) { ledState.set(p.id, false); changed = true; }
+      }
+      for (const s of sources) {
+        if (s.Ilim == null) continue;
+        const cc = ccState.get(s.id);
+        if (!cc && I[s.id] > s.Ilim + 1e-9) { ccState.set(s.id, true); changed = true; }
+        else if (cc && V[s.pos] - V[s.neg] > s.V + 1e-9) { ccState.set(s.id, false); changed = true; }
+      }
+      if (!changed) break;
+    }
+    return result;
+  }
+
+  const Engine = { solve, R_WIRE, R_AMMETER, R_VOLTMETER };
+  root.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* schem.js */
+/* ===== Schematic renderer: SVG symbols, wires, voltage colors ===== */
+(function (root) {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function el(tag, attrs = {}, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'text') e.textContent = v;
+      else if (k === 'class') e.setAttribute('class', v);
+      else e.setAttribute(k, v);
+    }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  function svg(w, h, opts = {}) {
+    const s = el('svg', { viewBox: `0 0 ${w} ${h}`, role: opts.role || 'img', 'aria-labelledby': opts.labelledby, focusable: 'false' });
+    if (opts.title) { const t = el('title', { id: opts.titleId, text: opts.title }, s); }
+    if (opts.desc) el('desc', { id: opts.descId, text: opts.desc }, s);
+    return s;
+  }
+
+  /* ---- voltage color: low (cool) -> mid (neutral) -> high (warm) ---- */
+  const C_LOW = [0, 114, 178], C_MID = [166, 156, 146], C_HIGH = [213, 94, 0];
+  function mix(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+  function vColor(v, vmax) {
+    if (!(vmax > 0)) return '#8c94a0';
+    const t = Math.max(0, Math.min(1, v / vmax));
+    const c = t < 0.5 ? mix(C_LOW, C_MID, t / 0.5) : mix(C_MID, C_HIGH, (t - 0.5) / 0.5);
+    return `rgb(${c[0]} ${c[1]} ${c[2]})`;
+  }
+
+  /* ---- geometry helpers ---- */
+  function seg(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+    return { L, ang: Math.atan2(dy, dx) * 180 / Math.PI, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
+  }
+  // group placed so local x-axis runs from (x1,y1) to (x2,y2)
+  function placed(parent, x1, y1, x2, y2, cls) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${x1} ${y1}) rotate(${s.ang})`, class: cls }, parent);
+    return { g, L: s.L };
+  }
+
+  function wire(parent, pts, color, opts = {}) {
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    return el('path', { d, class: 'wire' + (opts.cls ? ' ' + opts.cls : ''), stroke: color || '#8c94a0', 'stroke-width': opts.width }, parent);
+  }
+  function junction(parent, x, y, color) {
+    return el('circle', { cx: x, cy: y, r: 5, fill: color || '#1b2330' }, parent);
+  }
+  // leads drawn colored by node voltage, body in ink
+  function leads(g, L, body, ca, cb) {
+    const a = (L - body) / 2;
+    el('path', { d: `M0 0 H${a}`, class: 'wire', stroke: ca || '#8c94a0' }, g);
+    el('path', { d: `M${L - a} 0 H${L}`, class: 'wire', stroke: cb || ca || '#8c94a0' }, g);
+    return a;
+  }
+
+  /* ---- symbols (drawn between two terminal points) ---- */
+  function resistor(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 44, a = leads(g, L, body, o.ca, o.cb);
+    const n = 6, w = body / n, amp = 8;
+    let d = `M${a} 0`;
+    for (let i = 0; i < n; i++) d += ` L${a + w * (i + 0.5)} ${i % 2 ? amp : -amp}`;
+    d += ` L${a + body} 0`;
+    el('path', { d, class: 'sym' }, g);
+    return g;
+  }
+  // battery: (x1,y1) = negative terminal, (x2,y2) = positive terminal
+  function battery(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const cells = o.cells || 2, body = cells * 14 - 6, a = leads(g, L, body, o.cneg, o.cpos);
+    for (let i = 0; i < cells; i++) {
+      const x = a + i * 14;
+      el('path', { d: `M${x} -8 V8`, class: 'sym', 'stroke-width': 4.5 }, g);          // short plate (−)
+      el('path', { d: `M${x + 8} -17 V17`, class: 'sym' }, g);                           // long plate (+)
+    }
+    // + / − marks (kept upright)
+    const s = seg(x1, y1, x2, y2), rad = s.ang * Math.PI / 180;
+    const nx = -Math.sin(rad), ny = Math.cos(rad);
+    const off = o.markSide === 'left' ? -1 : 1;
+    const px = x1 + Math.cos(rad) * (a + body + 6) + nx * 24 * off, py = y1 + Math.sin(rad) * (a + body + 6) + ny * 24 * off;
+    const qx = x1 + Math.cos(rad) * (a - 6) + nx * 24 * off, qy = y1 + Math.sin(rad) * (a - 6) + ny * 24 * off;
+    el('text', { x: px, y: py + 5, class: 'lbl', 'text-anchor': 'middle', text: '+' }, parent);
+    el('text', { x: qx, y: qy + 5, class: 'lbl', 'text-anchor': 'middle', text: '−' }, parent);
+    return g;
+  }
+  function lamp(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 14, a = leads(g, L, 2 * r, o.ca, o.cb), cx = a + r;
+    const glow = el('g', { class: 'lamp-glow', opacity: o.lit ? 1 : 0 }, g);
+    el('circle', { cx, cy: 0, r: r + 5, fill: '#ffe680', opacity: .55 * (o.brightness ?? 1) + .15 }, glow);
+    for (let i = 0; i < 8; i++) {
+      const t = i * Math.PI / 4, r1 = r + 8, r2 = r + 15;
+      el('path', { d: `M${cx + Math.cos(t) * r1} ${Math.sin(t) * r1} L${cx + Math.cos(t) * r2} ${Math.sin(t) * r2}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, glow);
+    }
+    el('circle', { cx, cy: 0, r, class: 'sym', fill: o.lit ? '#fff3b0' : '#ffffff' }, g);
+    const k = r * 0.7071;
+    el('path', { d: `M${cx - k} ${-k} L${cx + k} ${k} M${cx - k} ${k} L${cx + k} ${-k}`, class: 'sym' }, g);
+    return g;
+  }
+  function led(parent, x1, y1, x2, y2, o = {}) {           // anode at (x1,y1)
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 26, a = leads(g, L, body, o.ca, o.cb);
+    if (o.lit) el('circle', { cx: a + 13, cy: 0, r: 22, fill: o.color || '#ff3b30', opacity: .22 }, g);
+    el('path', { d: `M${a} -12 L${a + 22} 0 L${a} 12 Z`, class: 'sym', fill: o.lit ? (o.color || '#ff3b30') : '#fff' }, g);
+    el('path', { d: `M${a + 22} -13 V13 M${a} 0 H${a + 26}`, class: 'sym' }, g);
+    for (const dx of [6, 15]) {
+      el('path', { d: `M${a + dx} -15 l9 -11 M${a + dx + 9} -26 l-6 1 M${a + dx + 9} -26 l-1 6`, class: 'sym', 'stroke-width': 1.8 }, g);
+    }
+    return g;
+  }
+  function sw(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 40, a = leads(g, L, body, o.ca, o.cb);
+    el('circle', { cx: a, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    el('circle', { cx: a + body, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    const lever = el('path', { d: o.closed ? `M${a} 0 L${a + body - 3} -2` : `M${a} 0 L${a + body - 6} -20`, class: 'sym sw-lever' }, g);
+    if (o.flip) g.setAttribute('transform', g.getAttribute('transform') + ` scale(1 -1)`);
+    return g;
+  }
+  function meter(parent, x1, y1, x2, y2, letter, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 15, a = leads(g, L, 2 * r, o.ca, o.cb);
+    el('circle', { cx: a + r, cy: 0, r, class: 'sym', fill: '#fff' }, g);
+    const s = seg(x1, y1, x2, y2);
+    const t = el('text', { x: a + r, y: 5, class: 'lbl', 'text-anchor': 'middle', 'font-size': 16, text: letter, transform: `rotate(${-s.ang} ${a + r} 0)` }, g);
+    return g;
+  }
+  function label(parent, x, y, text, o = {}) {
+    return el('text', { x, y, class: o.cls || 'lbl', 'text-anchor': o.anchor || 'middle', text }, parent);
+  }
+  function vtag(parent, x, y, text) {
+    const g = el('g', { class: 'vtag' }, parent);
+    const w = 8 + text.length * 7.2;
+    el('rect', { x: x - w / 2, y: y - 10, width: w, height: 20, rx: 5 }, g);
+    el('text', { x, y: y + 4.5, 'text-anchor': 'middle', text }, g);
+    return g;
+  }
+  function openMark(parent, x, y, o = {}) {
+    const g = el('g', { class: 'open-mark-g' }, parent);
+    el('circle', { cx: x, cy: y, r: o.r || 22, class: 'open-mark' }, g);
+    const lg = el('g', { class: 'open-label' }, g);
+    el('rect', { x: x - 24, y: y + (o.r || 22) + 4, width: 48, height: 18, rx: 4 }, lg);
+    el('text', { x, y: y + (o.r || 22) + 17, 'text-anchor': 'middle', text: 'OPEN' }, lg);
+    return g;
+  }
+  function arrowOnPath(parent, x1, y1, x2, y2, o = {}) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, parent);
+    el('path', { d: 'M-6 -6 L5 0 L-6 6 Z', class: 'arrowhead', fill: o.color }, g);
+    return g;
+  }
+  // focus ring rectangle sized to a group's bbox (call after the group is in the document)
+  function addFocusRing(g, pad = 8) {
+    const b = g.getBBox();
+    const r = el('rect', { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad, rx: 8, class: 'focus-ring' });
+    g.insertBefore(r, g.firstChild);
+    return r;
+  }
+
+  /* ---- path utilities (polyline length + point at distance) ---- */
+  function polyline(pts) {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const L = cum[cum.length - 1];
+    function at(s) {
+      s = Math.max(0, Math.min(L, s));
+      let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+      const t = (s - cum[i - 1]) / ((cum[i] - cum[i - 1]) || 1);
+      return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
+    }
+    return { pts, L, at };
+  }
+
+  const Schem = { el, svg, vColor, wire, junction, resistor, battery, lamp, led, sw, meter, label, vtag, openMark, arrowOnPath, addFocusRing, polyline, seg, NS };
+  root.Schem = Schem;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* dots.js */
+/* ===== Current-dot animator =====
+ * Conventional current. Every dot moves at the same speed in every tool.
+ * Each dot = the same amount of charge, so more current = dots closer together.
+ * spacing (px) = refSpacing * refCurrent / |I|
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem;
+
+  class DotFlow {
+    constructor(layer, opts = {}) {
+      this.layer = layer;
+      this.speed = opts.speed ?? 70;               // px per second, constant
+      this.refCurrent = opts.refCurrent ?? 0.01;   // A
+      this.refSpacing = opts.refSpacing ?? 70;     // px between dots at refCurrent
+      this.minSpacing = opts.minSpacing ?? 14;
+      this.r = opts.r ?? 4.2;
+      this.paths = [];
+      this.running = false;
+      this.motion = true;
+      this.last = 0;
+      this._tick = this._tick.bind(this);
+    }
+    spacingFor(I) {
+      const a = Math.abs(I);
+      if (a < 1e-7) return null;
+      return Math.max(this.minSpacing, this.refSpacing * this.refCurrent / a);
+    }
+    // pts listed in the direction of positive conventional current
+    add(id, pts, getI) {
+      const pl = S.polyline(pts);
+      const g = S.el('g', { 'data-flow': id, 'aria-hidden': 'true' }, this.layer);
+      const p = { id, pl, getI, g, phase: 0, spacing: this.refSpacing, dots: [], frozen: false };
+      this.paths.push(p);
+      this._layout(p);
+      return p;
+    }
+    clear() { this.paths.forEach(p => p.g.remove()); this.paths = []; }
+    _layout(p) {
+      const I = p.getI();
+      const sp = this.spacingFor(I);
+      p.frozen = sp == null;
+      if (sp != null) p.spacing = sp;
+      p.dir = I < 0 ? -1 : 1;
+      const n = Math.max(1, Math.floor(p.pl.L / p.spacing) + 2);
+      while (p.dots.length < n) p.dots.push(S.el('circle', { r: this.r, class: 'dot' }, p.g));
+      while (p.dots.length > n) p.dots.pop().remove();
+      this._place(p);
+    }
+    _place(p) {
+      const L = p.pl.L, sp = p.spacing;
+      const off = ((p.phase % sp) + sp) % sp;
+      p.dots.forEach((d, k) => {
+        let s = off + (k - 1) * sp;
+        if (p.dir < 0) s = L - s;
+        const vis = s >= 0 && s <= L;
+        const [x, y] = p.pl.at(s);
+        d.setAttribute('cx', x.toFixed(1)); d.setAttribute('cy', y.toFixed(1));
+        d.setAttribute('opacity', vis ? 1 : 0);
+      });
+    }
+    refresh() { this.paths.forEach(p => this._layout(p)); }
+    setMotion(on) { this.motion = on; if (on) this.start(); }
+    start() {
+      if (this.running) return;
+      this.running = true; this.last = performance.now();
+      requestAnimationFrame(this._tick);
+    }
+    stop() { this.running = false; }
+    _tick(now) {
+      if (!this.running) return;
+      const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+      if (this.motion) {
+        for (const p of this.paths) {
+          if (p.frozen || p.paused) continue;
+          p.phase += this.speed * dt;
+          this._place(p);
+        }
+      }
+      if (this.onTick) this.onTick(dt, this.motion);
+      requestAnimationFrame(this._tick);
+    }
+  }
+  root.DotFlow = DotFlow;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* bb.js */
+/* ===== Breadboard renderer (illustrated, photo-style, drawn upright) =====
+ * Numbered rows run down the board. In each row, holes a–e are connected, and f–j are connected.
+ * The two rail columns on each side run the full length (+ red, − blue).
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem, el = S.el;
+  const P = 18;
+  const COLX = { 'L+': 20, 'L-': 38, a: 80, b: 98, c: 116, d: 134, e: 152, f: 188, g: 206, h: 224, i: 242, j: 260, 'R-': 302, 'R+': 320 };
+  const LEFT = 'abcde', RIGHT = 'fghij';
+
+  class Breadboard {
+    constructor(parent, opts = {}) {
+      this.rows = opts.rows || 30;
+      this.ox = opts.x || 0; this.oy = opts.y || 0;
+      this.g = el('g', { class: 'bb', transform: `translate(${this.ox} ${this.oy})` }, parent);
+      this.width = 340; this.height = 34 + (this.rows - 1) * P + 24;
+      this.draw();
+    }
+    hole(row, col) { return [this.ox + COLX[col], this.oy + 34 + (row - 1) * P]; }
+    node(row, col) {
+      if (col.length === 2) return col;                 // rails: 'L+', 'L-', 'R+', 'R-'
+      return row + (LEFT.includes(col) ? 'L' : 'R');
+    }
+    stripHoles(row, side) { return (side === 'L' ? LEFT : RIGHT).split('').map(c => this.hole(row, c)); }
+    draw() {
+      const g = this.g, H = this.height;
+      el('rect', { x: 0, y: 0, width: this.width, height: H, rx: 10, fill: '#f4f2eb', stroke: '#d4cfbf', 'stroke-width': 1.5 }, g);
+      el('rect', { x: 2, y: 2, width: this.width - 4, height: 6, rx: 3, fill: '#ffffff', opacity: .6 }, g);
+      el('rect', { x: 164, y: 14, width: 12, height: H - 28, rx: 3, fill: '#e3dfd3' }, g);
+      // rail stripes
+      const y1 = 20, y2 = H - 14;
+      el('path', { d: `M11 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('path', { d: `M47 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M293 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M329 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('text', { x: 20, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', fill: '#d8342c', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      el('text', { x: 38, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 302, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 320, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      for (const c of LEFT + RIGHT) el('text', { x: COLX[c], y: 20, 'text-anchor': 'middle', class: 'lbl-sm', text: c }, g);
+      const holes = el('g', { fill: '#3d3d3d' }, g);
+      for (let r = 1; r <= this.rows; r++) {
+        const y = 34 + (r - 1) * P;
+        if (r === 1 || r % 5 === 0) {
+          el('text', { x: 62, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+          el('text', { x: 280, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+        }
+        for (const c of LEFT + RIGHT) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+        if ((r - 1) % 6 !== 5) for (const c of ['L+', 'L-', 'R-', 'R+']) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+      }
+    }
+  }
+
+  /* ---- parts drawn on the board (coordinates are absolute points) ---- */
+  const BAND = { 0: '#1a1a1a', 1: '#7b4a1e', 2: '#d3221d', 3: '#f07c00', 4: '#f2c400', 5: '#2e9d3a', 6: '#2a5bd7', 7: '#8a3fd1', 8: '#8a8a8a', 9: '#f5f5f5' };
+  const BAND_NAME = ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'gray', 'white'];
+  function bands(ohms) {
+    let e = 0, v = ohms;
+    while (v >= 100) { v /= 10; e++; }
+    v = Math.round(v);
+    if (v < 10) { v *= 10; e--; }
+    const d1 = Math.floor(v / 10), d2 = v % 10;
+    return { colors: [BAND[d1], BAND[d2], BAND[e], '#c9a43a'], names: [BAND_NAME[d1], BAND_NAME[d2], BAND_NAME[e], 'gold'] };
+  }
+  function legLine(g, a, b, color = '#9aa1a8', w = 2.6) {
+    el('path', { d: `M${a[0]} ${a[1]} L${b[0]} ${b[1]}`, stroke: color, 'stroke-width': w, 'stroke-linecap': 'round', fill: 'none' }, g);
+  }
+  function pin(g, p) { el('rect', { x: p[0] - 3, y: p[1] - 3, width: 6, height: 6, rx: 1, fill: '#7d848c' }, g); }
+
+  function resistor(parent, p1, p2, ohms, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    legLine(g, p1, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -19, y: -6.5, width: 38, height: 13, rx: 6.5, fill: '#e4c895', stroke: '#b69563', 'stroke-width': 1 }, body);
+    el('rect', { x: -15, y: -5.5, width: 30, height: 3, rx: 1.5, fill: '#fff', opacity: .35 }, body);
+    const b = bands(ohms);
+    [-11, -5, 1, 11].forEach((x, i) => el('rect', { x, y: -6.5, width: 3.6, height: 13, fill: b.colors[i] }, body));
+    return g;
+  }
+  function wire(parent, pts, color = '#2e9d3a', o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    let d = '';
+    if (pts.length === 2 || o.straight) d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    else {
+      d = `M${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [px, py] = pts[i - 1], [cx, cy] = pts[i], [nx, ny] = pts[i + 1];
+        const r = 9;
+        const d1 = Math.hypot(cx - px, cy - py), d2 = Math.hypot(nx - cx, ny - cy);
+        const ax = cx + (px - cx) * Math.min(r, d1 / 2) / d1, ay = cy + (py - cy) * Math.min(r, d1 / 2) / d1;
+        const bx = cx + (nx - cx) * Math.min(r, d2 / 2) / d2, by = cy + (ny - cy) * Math.min(r, d2 / 2) / d2;
+        d += ` L${ax} ${ay} Q${cx} ${cy} ${bx} ${by}`;
+      }
+      const l = pts[pts.length - 1]; d += ` L${l[0]} ${l[1]}`;
+    }
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 7.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 5.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'bb-wire-core' }, g);
+    for (const p of [pts[0], pts[pts.length - 1]]) el('circle', { cx: p[0], cy: p[1], r: 3.4, fill: '#7d848c', stroke: 'rgb(0 0 0 / .3)' }, g);
+    return g;
+  }
+  // flexible lead (e.g. battery snap wires) as a smooth curve
+  function lead(parent, a, b, color, o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    const bend = o.bend ?? 40;
+    const d = `M${a[0]} ${a[1]} C${a[0]} ${a[1] + (o.down === false ? -bend : bend)} ${b[0] + (o.bx || 0)} ${b[1] + (o.by ?? -bend)} ${b[0]} ${b[1]}`;
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 6.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 4.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('circle', { cx: b[0], cy: b[1], r: 3.4, fill: '#7d848c' }, g);
+    return g;
+  }
+  function led(parent, anode, cathode, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, anode); pin(g, cathode);
+    const color = o.color || '#e8261c';
+    const s = S.seg(anode[0], anode[1], cathode[0], cathode[1]);
+    legLine(g, anode, [s.mx, s.my]); legLine(g, cathode, [s.mx, s.my]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    if (o.lit) {
+      el('circle', { r: 26, fill: color, opacity: .18 }, body);
+      el('circle', { r: 18, fill: color, opacity: .25 }, body);
+    }
+    // dome seen from above, flat edge on the cathode side (+x)
+    el('path', { d: 'M8 -10.5 A12 12 0 1 0 8 10.5 Z', fill: color, stroke: 'rgb(0 0 0 / .35)', 'stroke-width': 1.2, opacity: o.lit ? 1 : .82 }, body);
+    el('circle', { cx: -3, cy: -3, r: 4, fill: '#fff', opacity: o.lit ? .8 : .45 }, body);
+    // long-leg marker near the anode
+    el('text', { x: anode[0] + (o.plusDx ?? -12), y: anode[1] + 4, class: 'lbl-sm', 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font-size:13px;font-weight:800;fill:#1b2330');
+    return g;
+  }
+  function bulb(parent, p1, p2, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    legLine(g, p1, [s.mx, s.my], '#6d737a', 3); legLine(g, p2, [s.mx, s.my], '#6d737a', 3);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my})` }, g);
+    if (o.lit) {
+      el('circle', { r: 30, fill: '#ffe066', opacity: .3 }, body);
+      for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; el('path', { d: `M${Math.cos(t) * 20} ${Math.sin(t) * 20} L${Math.cos(t) * 27} ${Math.sin(t) * 27}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, body); }
+    }
+    el('circle', { r: 14, fill: o.lit ? '#fff3a8' : '#eef3f7', stroke: '#8a96a3', 'stroke-width': 1.5, opacity: .95 }, body);
+    el('path', { d: 'M-6 3 Q-3 -6 0 3 Q3 -6 6 3', fill: 'none', stroke: o.lit ? '#e07b00' : '#7b6a55', 'stroke-width': 1.8 }, body);
+    el('circle', { cx: -5, cy: -6, r: 3, fill: '#fff', opacity: .7 }, body);
+    return g;
+  }
+  // slide switch over three holes in a line; pins[1] is common. on => common joined to pins[0]
+  function slideSwitch(parent, pins, on, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pins.forEach(p => pin(g, p));
+    const [a, b, c] = pins, s = S.seg(a[0], a[1], c[0], c[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -27, y: -11, width: 54, height: 22, rx: 4, fill: '#2b2f36', stroke: '#111', 'stroke-width': 1 }, body);
+    el('rect', { x: -19, y: -5, width: 38, height: 10, rx: 2, fill: '#15181c' }, body);
+    el('rect', { x: on ? -18 : 2, y: -6.5, width: 16, height: 13, rx: 2.5, fill: '#e6e8eb', stroke: '#9aa1a8', class: 'sw-knob' }, body);
+    return g;
+  }
+  function battery9v(parent, x, y, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    el('rect', { x: x + 6, y: y - 10, width: 14, height: 12, rx: 3, fill: '#c9ccd1', stroke: '#6d737a' }, g);   // + snap (small)
+    el('rect', { x: x + 34, y: y - 12, width: 18, height: 14, rx: 2, fill: '#c9ccd1', stroke: '#6d737a' }, g);  // − snap (hex)
+    el('rect', { x, y, width: 58, height: 92, rx: 6, fill: '#2b2f36', stroke: '#111' }, g);
+    el('rect', { x: x + 4, y: y + 30, width: 50, height: 30, rx: 3, fill: '#e3a21a' }, g);
+    el('text', { x: x + 29, y: y + 51, 'text-anchor': 'middle', text: o.label || '9V' }, g).setAttribute('style', 'font:800 17px system-ui,sans-serif;fill:#1b2330');
+    el('text', { x: x + 13, y: y + 20, 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    el('text', { x: x + 43, y: y + 20, 'text-anchor': 'middle', text: '−' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    return { g, pos: [x + 13, y - 10], neg: [x + 43, y - 12] };
+  }
+  function testPoint(parent, p, label, o = {}) {
+    const g = el('g', { class: 'tp' }, parent);
+    el('circle', { cx: p[0], cy: p[1], r: 7, fill: 'none', stroke: '#7b3fe4', 'stroke-width': 2 }, g);
+    const lx = p[0] + (o.dx ?? 16), ly = p[1] + (o.dy ?? 0);
+    const w = 10 + label.length * 7;
+    el('rect', { x: lx - (o.anchor === 'end' ? w : 0), y: ly - 9, width: w, height: 18, rx: 4, fill: '#fff', stroke: '#7b3fe4', 'stroke-width': 1.2 }, g);
+    el('text', { x: lx + (o.anchor === 'end' ? -w / 2 : w / 2), y: ly + 4, 'text-anchor': 'middle', text: label }, g).setAttribute('style', 'font:700 11px system-ui,sans-serif;fill:#5a2bb0');
+    return g;
+  }
+
+  root.BB = { Breadboard, resistor, wire, lead, led, bulb, slideSwitch, battery9v, testPoint, bands, P, COLX };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* ui.js */
+/* ===== UI kit: DOM helper, captions, predict-then-reveal, feedback, motion, sliders, CSV ===== */
+(function (root) {
+  'use strict';
+
+  function h(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k === 'html') e.innerHTML = v;
+      else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else if (v === true) e.setAttribute(k, '');
+      else e.setAttribute(k, v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return e;
+  }
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* ---- number formatting ---- */
+  function sig(x, n = 3) {
+    if (!isFinite(x)) return '—';
+    if (Math.abs(x) < 1e-12) return '0';
+    x = Number(x.toPrecision(n));
+    const d = Math.max(0, n - 1 - Math.floor(Math.log10(Math.abs(x))));
+    return x.toFixed(Math.min(d, 6));
+  }
+  function fmtV(v, n = 3) { return sig(v, n) + ' V'; }
+  function fmtI(a, n = 3) { if (Math.abs(a) < 1e-7) return '0 mA'; return Math.abs(a) < 1 ? sig(a * 1000, n) + ' mA' : sig(a, n) + ' A'; }
+  function fmtR(r, n = 3) { return r >= 1000 ? sig(r / 1000, n) + ' kΩ' : sig(r, n) + ' Ω'; }
+  function spokenUnits(s) {
+    return s.replace(/kΩ/g, ' kilohms').replace(/Ω/g, ' ohms').replace(/\bmA\b/g, 'milliamps').replace(/\bV\b/g, 'volts').replace(/\bW\b/g, 'watts').replace(/−/g, 'minus ');
+  }
+
+  /* ---- live announcer (polite + assertive) ---- */
+  let politeEl, assertEl;
+  function ensureAnnouncer() {
+    if (politeEl) return;
+    politeEl = h('div', { class: 'sr-only', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    assertEl = h('div', { class: 'sr-only', 'aria-live': 'assertive', 'aria-atomic': 'true' });
+    document.body.append(politeEl, assertEl);
+  }
+  function announce(text, assertive = false) {
+    ensureAnnouncer();
+    const t = assertive ? assertEl : politeEl;
+    t.textContent = '';
+    setTimeout(() => { t.textContent = text; }, 30);
+  }
+
+  /* ---- captions with transcript ---- */
+  class Captioner {
+    constructor(mount, opts = {}) {
+      this.lines = [];
+      this.textEl = h('div', { class: 'caption-text', 'aria-live': 'polite', 'aria-atomic': 'true' }, opts.initial || '');
+      this.el = h('div', { class: 'caption', role: 'region', 'aria-label': 'Captions' }, h('span', { class: 'cc', 'aria-hidden': 'true' }, 'CC'), this.textEl);
+      this.list = h('ol');
+      this.details = h('details', { class: 'transcript' }, h('summary', { class: 'small' }, 'Show transcript'), this.list);
+      mount.append(this.el, this.details);
+      if (opts.initial) this.log(opts.initial);
+    }
+    set(text) {
+      if (this.textEl.textContent === text) return;
+      this.textEl.textContent = text;
+      this.log(text);
+    }
+    log(text) {
+      if (this.lines[this.lines.length - 1] === text) return;
+      this.lines.push(text);
+      this.list.append(h('li', {}, text));
+    }
+    clear() { this.lines = []; this.list.textContent = ''; }
+  }
+
+  /* ---- feedback badge ---- */
+  const ICONS = {
+    ok: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bad: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    warn: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L23 21H1z" fill="currentColor"/><path d="M12 9v5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.5" fill="#fff"/></svg>',
+    info: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M12 11v6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="7.3" r="1.6" fill="#fff"/></svg>'
+  };
+  const FB_WORD = { ok: 'Correct', bad: 'Not quite', warn: 'Safety check', info: 'Note' };
+  function feedback(kind, title, text) {
+    const color = { ok: 'var(--ok)', bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--ink-2)' }[kind];
+    const icon = h('span', { html: ICONS[kind], style: `color:${color};display:inline-flex` });
+    return h('div', { class: 'fb ' + kind, role: kind === 'warn' || kind === 'bad' ? 'alert' : 'status' },
+      icon, h('div', {}, h('strong', {}, title || FB_WORD[kind]), text ? h('span', {}, text) : null));
+  }
+
+  /* ---- predict, then reveal ---- */
+  let predictCount = 0;
+  class Predict {
+    constructor(mount, { question, choices, onLock, lockLabel }) {
+      this.choices = choices;
+      const name = 'predict-' + (++predictCount);
+      this.radios = choices.map((c, i) => h('input', { type: 'radio', name, value: i }));
+      this.lockBtn = h('button', { class: 'btn btn-primary', type: 'button', disabled: true }, lockLabel || 'Lock in prediction');
+      this.result = h('div', { class: 'predict-result' });
+      this.fs = h('fieldset', {}, h('legend', {}, question),
+        h('div', { class: 'choices' }, choices.map((c, i) => h('label', { class: 'choice' }, this.radios[i], h('span', {}, c)))));
+      this.el = h('div', { class: 'predict' }, this.fs, h('div', { class: 'row' }, this.lockBtn), this.result);
+      this.radios.forEach(r => r.addEventListener('change', () => { this.lockBtn.disabled = false; }));
+      this.lockBtn.addEventListener('click', () => {
+        const sel = this.radios.findIndex(r => r.checked);
+        if (sel < 0) return;
+        this.locked = sel;
+        this.radios.forEach(r => { r.disabled = true; });
+        this.el.classList.add('locked');
+        this.lockBtn.hidden = true;
+        this.result.replaceChildren(h('p', { class: 'small muted', style: 'margin:8px 0 0' }, 'Prediction locked: “' + choices[sel] + '”'));
+        announce('Prediction locked: ' + choices[sel]);
+        onLock && onLock(sel);
+      });
+      mount.append(this.el);
+    }
+    reveal(actualIndex, explanation) {
+      const p = this.locked;
+      const match = p === actualIndex;
+      this.result.replaceChildren(h('dl', { class: 'compare' },
+        h('dt', {}, 'You predicted'), h('dd', {}, p == null ? '(no prediction)' : this.choices[p]),
+        h('dt', {}, 'What happened'), h('dd', {}, this.choices[actualIndex]),
+      ), h('p', { class: 'small', style: 'margin:8px 0 0' },
+        h('span', { class: 'tag' }, match ? 'Matches your prediction' : 'Different from your prediction'), ' ', explanation || ''));
+      announce('You predicted ' + (p == null ? 'nothing' : this.choices[p]) + '. What happened: ' + this.choices[actualIndex] + '. ' + (explanation || ''));
+    }
+    reset() {
+      this.locked = undefined;
+      this.radios.forEach(r => { r.disabled = false; r.checked = false; });
+      this.el.classList.remove('locked');
+      this.lockBtn.hidden = false; this.lockBtn.disabled = true;
+      this.result.replaceChildren();
+    }
+  }
+
+  /* ---- motion preference + pause toggle ---- */
+  const mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false, addEventListener() {} };
+  const motion = {
+    reduced: mq.matches,
+    on: !mq.matches,
+    listeners: [],
+    set(v) { this.on = v; this.listeners.forEach(f => f(v)); },
+    onChange(f) { this.listeners.push(f); f(this.on); },
+    button() {
+      const b = h('button', { class: 'btn btn-small', type: 'button', 'aria-pressed': String(!this.on) });
+      const sync = v => { b.setAttribute('aria-pressed', String(!v)); b.textContent = v ? 'Pause motion' : 'Play motion'; };
+      b.addEventListener('click', () => this.set(!this.on));
+      this.onChange(sync);
+      return b;
+    }
+  };
+  mq.addEventListener && mq.addEventListener('change', e => { motion.reduced = e.matches; motion.set(!e.matches); });
+
+  /* ---- slider with linked number box ---- */
+  function syncSlider(input) {
+    const min = +input.min || 0, max = +input.max || 100;
+    input.style.setProperty('--slider-progress', ((+input.value - min) / (max - min) * 100) + '%');
+  }
+  function slider({ id, label, min, max, step, value, unit, format, onInput, values }) {
+    // values: optional discrete list (slider indexes into it)
+    const discrete = Array.isArray(values);
+    const input = h('input', { type: 'range', id, min: discrete ? 0 : min, max: discrete ? values.length - 1 : max, step: discrete ? 1 : step, value: discrete ? Math.max(0, values.indexOf(value)) : value });
+    const out = h('output', { for: id, class: 'val' });
+    const get = () => discrete ? values[+input.value] : +input.value;
+    const fmt = format || (v => v + (unit ? ' ' + unit : ''));
+    const update = (fire = true) => {
+      const v = get();
+      out.textContent = fmt(v);
+      input.setAttribute('aria-valuetext', spokenUnits(fmt(v)));
+      syncSlider(input);
+      if (fire && onInput) onInput(v);
+    };
+    input.addEventListener('input', () => update());
+    const wrap = h('div', { class: 'field' }, h('label', { for: id }, h('span', {}, label), out), input);
+    update(false);
+    return { el: wrap, input, get, set(v) { input.value = discrete ? Math.max(0, values.indexOf(v)) : v; update(false); }, update };
+  }
+
+  /* ---- teacher panel ---- */
+  function about(mount, html) {
+    const d = h('details', { class: 'about' }, h('summary', {}, 'About this tool'), h('div', { class: 'about-body', html }));
+    mount.append(d);
+    return d;
+  }
+
+  /* ---- CSV download ---- */
+  function downloadCSV(filename, rows) {
+    const esc = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = rows.map(r => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: filename });
+    document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ---- SVG focusable part helper: keyboard + pointer activation ---- */
+  function makeFocusable(g, { label, onActivate, onFocus, onBlur, role }) {
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', role || 'button');
+    g.setAttribute('aria-label', label);
+    g.classList.add('focusable');
+    if (onActivate) {
+      g.addEventListener('click', e => onActivate(e));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(e); } });
+    }
+    if (onFocus) { g.addEventListener('focus', onFocus); g.addEventListener('pointerenter', onFocus); }
+    if (onBlur) { g.addEventListener('blur', onBlur); g.addEventListener('pointerleave', onBlur); }
+    return g;
+  }
+
+  /* ---- shuffle ---- */
+  function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  root.UI = { h, $, $$, sig, fmtV, fmtI, fmtR, spokenUnits, announce, Captioner, feedback, Predict, motion, slider, syncSlider, about, downloadCSV, makeFocusable, shuffle };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+  const { h, $, $$, sig, feedback, about, announce, downloadCSV, fmtR } = UI;
+  const S = Schem;
+
+  /* ---------- this session's real parts (within tolerance) ---------- */
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const PARTS = { Vb: +rnd(8.6, 9.4).toFixed(2), R1: Math.round(1000 * rnd(0.95, 1.05)), R2: Math.round(2200 * rnd(0.95, 1.05)), Rint: 1.5 };
+  const NOM = { Vb: 9, R1: 1000, R2: 2200 };
+
+  /* ---------- state ---------- */
+  const st = { sw: true, gap1: false, gap2: false, dial: 'V', jack: 'VO', red: null, black: null, placing: 'red', fuse: false, data: {}, pred: {} };
+
+  /* ---------- test points: id -> { node, hole, label, desc, side } ---------- */
+  const TP = {
+    TP1: { node: 'P', hole: [13, 'L+'], side: 'left', desc: 'TP1: + rail (battery +)' },
+    TP2: { node: 'n5', hole: [5, 'a'], side: 'left', desc: 'TP2: top of R1 (after the switch)' },
+    TP3: { node: 'n10L', hole: [10, 'a'], side: 'left', desc: 'TP3: between R1 and R2' },
+    TP4: { node: 'N', hole: [16, 'i'], side: 'right', desc: 'TP4: bottom of R2' },
+    TP5: { node: 'N', hole: [20, 'R-'], side: 'right', desc: 'TP5: − rail (battery −)' },
+    '1A': { node: 'P', hole: [4, 'L+'], side: 'left', gap: 1, dy: -18, desc: 'Gap 1, end A (+ rail side)' },
+    '1B': { node: 'n4', hole: [4, 'a'], side: 'left', gap: 1, desc: 'Gap 1, end B (switch side)' },
+    '2A': { node: 'n10L', hole: [10, 'd'], side: 'left', gap: 2, dy: -20, desc: 'Gap 2, end A (R1 side)' },
+    '2B': { node: 'n10R', hole: [10, 'g'], side: 'right', gap: 2, desc: 'Gap 2, end B (R2 side)' }
+  };
+  const tpAvailable = id => !TP[id].gap || (TP[id].gap === 1 ? st.gap1 : st.gap2);
+
+  /* ---------- circuit solve with an optional meter element ---------- */
+  function netlist(extra, opts = {}) {
+    const p = [
+      { id: 'BAT', type: 'vsource', pos: 'Pi', neg: 'N', V: opts.noBattery ? 0 : PARTS.Vb },
+      { id: 'RINT', type: 'resistor', a: 'Pi', b: 'P', R: PARTS.Rint },
+      { id: 'SW1', type: 'switch', a: 'n4', b: 'n5', closed: st.sw },
+      { id: 'R1', type: 'resistor', a: 'n5', b: 'n10L', R: PARTS.R1 },
+      { id: 'R2', type: 'resistor', a: 'n10R', b: 'N', R: PARTS.R2 }
+    ];
+    if (!st.gap1) p.push({ id: 'J1', type: 'wire', a: 'P', b: 'n4' });
+    if (!st.gap2) p.push({ id: 'J2', type: 'wire', a: 'n10L', b: 'n10R' });
+    if (extra) p.push(extra);
+    return Engine.solve(p, { ground: 'N' });
+  }
+  // which nodes are joined by ideal links (for naming what the probes are across)
+  function canon(n) {
+    const join = { n10R: !st.gap2 ? 'n10L' : 'n10R', n4: !st.gap1 ? 'P' : 'n4' };
+    return join[n] || n;
+  }
+  function pairKey(a, b) { return [canon(a), canon(b)].sort().join('|'); }
+  const PAIRS = () => ({
+    [pairKey('n5', 'n10L')]: 'R1',
+    [pairKey('n10R', 'N')]: 'R2',
+    [pairKey('P', 'N')]: 'battery',
+    ...(st.gap1 ? { [pairKey('P', 'n4')]: 'gap1' } : {}),
+    ...(st.gap2 ? { [pairKey('n10L', 'n10R')]: 'gap2' } : {}),
+    ...(!st.sw ? { [pairKey(st.gap1 ? 'n4' : 'P', 'n5')]: 'switch' } : {})
+  });
+
+  /* ---------- the measurement ---------- */
+  function measure() {
+    const out = { display: '', unit: '', value: null, kind: 'none', msgs: [], task: null };
+    const msg = (kind, title, text) => out.msgs.push({ kind, title, text });
+    if (st.fuse) { out.display = 'FUSE'; msg('warn', 'Fuse blown', ' The meter’s current fuse is open. Remove the probes, then press “Replace fuse.” In a real lab, ask your teacher before replacing a fuse.'); return out; }
+    if (st.dial === 'OFF') { out.display = ''; return out; }
+    const unitOf = { V: 'V', mA: 'mA', O: 'Ω' };
+    out.unit = unitOf[st.dial];
+    if (!st.red || !st.black) { out.display = st.dial === 'O' ? 'OL' : '0.00'; msg('info', 'Place both probes', ' Choose where the red and black probes go.'); return out; }
+    const a = TP[st.red].node, b = TP[st.black].node;
+    const across = PAIRS()[pairKey(a, b)];
+    const same = canon(a) === canon(b);
+    const powered = netlist(null);
+    const circuitComplete = !st.gap1 && !st.gap2 && st.sw;
+
+    // red lead in the mA jack: the meter is a low-resistance path no matter what the dial says
+    if (st.jack === 'mA') {
+      const r = netlist({ id: 'M', type: 'ammeter', a, b });
+      const I = r.I.M;
+      if (Math.abs(I) > 0.2) {
+        st.fuse = true;
+        out.display = 'FUSE';
+        msg('warn', 'Near short circuit: fuse blown', ` The ammeter has almost no resistance, so connecting it across ${across === 'battery' ? 'the battery' : 'these points'} let a large current flow (over ${Math.floor(Math.abs(I))} A). This can blow the meter’s fuse or overheat the battery. Never connect an ammeter in parallel with a source. Turn off power, remove the probes, and replace the fuse.`);
+        return out;
+      }
+      if (st.dial !== 'mA') {
+        out.display = st.dial === 'O' ? 'OL' : '0.00';
+        msg('bad', 'Check which jack the red lead is in', ` The dial is set to ${st.dial === 'V' ? 'voltage' : 'resistance'}, but the red lead is in the mA jack. Move the red lead to VΩ.` + (Math.abs(I) > 1e-6 ? ' (Current is flowing through the meter right now, which changes the circuit.)' : ''));
+        return out;
+      }
+      // dial at mA, jack mA
+      const mA = I * 1000;
+      out.value = round3(mA); out.display = fmtNum(out.value); out.kind = 'I';
+      if (same || Math.abs(mA) < 0.005) {
+        msg('info', 'No current through the meter', same ? ' Both probes are on the same connection, so no current goes through the meter.' : (!circuitComplete && !(across === 'gap1' || across === 'gap2' || across === 'switch')) ? ' The circuit is not complete, so no current flows. Check the switch and the gaps.' : ' No current is flowing through the meter here.');
+      } else if (across === 'gap1' || across === 'gap2' || across === 'switch') {
+        const otherOpen = (across === 'gap1' && st.gap2) || (across === 'gap2' && st.gap1) || (across !== 'switch' && !st.sw);
+        if (otherOpen) msg('info', 'Ammeter in series', ' The meter is in series, but another break in the circuit stops the current. Close the other gap and turn the switch on.');
+        else {
+          msg('ok', 'Ammeter in series: correct', across === 'switch' ? ' With SW1 off, the meter across the switch completes the circuit, so all of the current flows through it. Opening a gap works the same way.' : ' The circuit is broken at the gap, so all of the current must pass through the meter.');
+          out.task = 'I';
+        }
+        if (mA < 0) msg('info', 'Negative reading', ' The minus sign means current enters the black probe. The probes are swapped; the size of the reading is still correct.');
+      } else {
+        const what = across === 'R1' ? 'R1' : across === 'R2' ? 'R2' : 'part of the circuit';
+        msg('bad', 'Ammeter in parallel: wrong reading', ` The ammeter has almost no resistance, so it made a shortcut around ${what}. ${what === 'part of the circuit' ? 'That part' : what} now carries almost no current, and the reading is not the normal circuit current. Put the ammeter in series: open a gap and place the probes across it.`);
+      }
+      return out;
+    }
+
+    // red lead in VΩ
+    if (st.dial === 'mA') {
+      out.display = '0.00';
+      msg('bad', 'Check which jack the red lead is in', ' The dial is set to current (mA), but the red lead is in the VΩ jack. Move the red lead to the mA jack.');
+      return out;
+    }
+    if (st.dial === 'V') {
+      const r = netlist({ id: 'M', type: 'voltmeter', a, b });
+      const v = r.V[a] - r.V[b];
+      out.value = round3(v); out.display = fmtNum(out.value); out.kind = 'V';
+      if (same) msg('info', 'Same connection', ' Both probes touch the same connection, so there is no voltage between them. Place the probes on either side of a part.');
+      else if (across === 'R1' || across === 'R2' || across === 'battery') {
+        if (circuitComplete || across === 'battery') {
+          msg('ok', 'Voltmeter in parallel: correct', ` The probes are on either side of ${across === 'battery' ? 'the battery' : across}, so the meter reads the voltage across it.`);
+          if (across === 'R1') out.task = 'V1';
+          if (across === 'R2') out.task = 'V2';
+        } else msg('info', 'Circuit not complete', ` With ${!st.sw ? 'the switch off' : 'a gap open'}, no current flows, so ${across} has no voltage across it. Close the circuit to measure its normal voltage.`);
+      } else if (across === 'gap1' || across === 'gap2' || across === 'switch') {
+        msg('bad', 'Voltmeter in series', ` The voltmeter now sits in the path of the current. It has a very high resistance, so it blocks the current: the circuit stops working, and the meter reads about the full battery voltage instead of a part’s voltage. To measure a part’s voltage, place the probes on either side of it with the circuit closed.`);
+      } else msg('info', 'Across more than one part', ' The probes span more than one part, so this is the voltage across that whole section. For one part, place the probes right on either side of it.');
+      if (v < -0.005 && !same) msg('info', 'Negative reading', ' The minus sign means the probes are swapped (red is on the lower-voltage side). The size of the reading is still correct.');
+      return out;
+    }
+    // ohms
+    const vPresent = Math.abs(powered.V[a] - powered.V[b]);
+    if (!same && vPresent > 0.01) {
+      out.display = '---';
+      msg('warn', 'Resistance readings are not valid with power on', ' There is a voltage between the probes. An ohmmeter uses its own small battery, so outside voltage spoils the reading and can damage some meters. Turn SW1 off (and never measure resistance across a battery).');
+      return out;
+    }
+    if (same) { out.value = 0; out.display = '0.0'; out.kind = 'R'; msg('info', 'Same connection', ' Both probes touch the same connection, so the meter reads about 0 Ω.'); return out; }
+    const r = netlist({ id: 'M', type: 'vsource', pos: a, neg: b, V: 1 }, { noBattery: true });
+    const R = Math.abs(1 / r.I.M);
+    if (!isFinite(R) || R > 2e7) { out.display = 'OL'; out.kind = 'R'; msg('info', 'OL (open)', ' There is no complete path between the probes, so the resistance is too high to measure.'); return out; }
+    out.value = R; out.kind = 'R';
+    out.display = R >= 1000 ? fmtNum(round3(R / 1000)) : fmtNum(round3(R));
+    out.unit = R >= 1000 ? 'kΩ' : 'Ω';
+    if (across === 'R1' || across === 'R2') {
+      msg('ok', 'Power off: correct', ` The ohmmeter reads the resistance of ${across}.` + (across === 'R1' ? '' : ''));
+      if (across === 'R1') out.task = 'R1';
+    } else msg('info', 'Resistance of this section', ' The probes span more than one part, so this is the resistance of that whole section.');
+    return out;
+  }
+  const round3 = x => Number(Number(x).toPrecision(3));
+  const fmtNum = x => { const a = Math.abs(x); return a >= 100 ? x.toFixed(0) : a >= 10 ? x.toFixed(1) : x.toFixed(2); };
+
+  /* ---------- breadboard drawing ---------- */
+  const bsvg = S.svg(520, 524, { role: 'group' });
+  bsvg.setAttribute('aria-label', 'Breadboard circuit with test points');
+  $('#board').append(bsvg);
+  function drawBoard() {
+    bsvg.replaceChildren();
+    const board = new BB.Breadboard(bsvg, { rows: 26, x: 100, y: 2 });
+    const H = (r, c) => board.hole(r, c);
+    const bat = BB.battery9v(bsvg, 16, 418);
+    BB.lead(bsvg, bat.pos, H(22, 'L+'), '#d63b32', { bend: 30, by: 0, bx: -30, down: false });
+    BB.lead(bsvg, bat.neg, H(23, 'L-'), '#222', { bend: 20, by: 0, bx: -24, down: false });
+    S.el('text', { x: 45, y: 530 - 8, 'text-anchor': 'middle', class: 'lbl-sm', text: 'Battery' }, bsvg);
+    const parts = S.el('g', {}, bsvg);
+    // jumper J1 (gap 1) and J2 (gap 2)
+    const jumper = (from, to, color, open, name) => {
+      if (!open) { BB.wire(parts, [H(...from), H(...to)], color); const m = H(...from), n = H(...to); S.el('text', { x: (m[0] + n[0]) / 2, y: m[1] - 8, 'text-anchor': 'middle', class: 'lbl-sm', text: name }, parts); return; }
+      const m = H(...from), n = H(...to);
+      const g = S.el('g', { opacity: .45, transform: 'translate(8 -16)' }, parts);
+      BB.wire(g, [m, n], color);
+      S.el('text', { x: (m[0] + n[0]) / 2, y: m[1] - 20, 'text-anchor': 'middle', class: 'lbl-sm', text: name + ' (lifted)' }, parts);
+      S.el('path', { d: `M${m[0]} ${m[1]} L${n[0]} ${n[1]}`, class: 'open-mark' }, parts);
+    };
+    jumper([4, 'L+'], [4, 'a'], '#d63b32', st.gap1, 'J1');
+    BB.slideSwitch(parts, [H(4, 'c'), H(5, 'c'), H(6, 'c')], st.sw);
+    S.el('text', { x: H(5, 'c')[0] - 16, y: H(5, 'c')[1] + 4, 'text-anchor': 'end', class: 'lbl-sm', text: '' }, parts);
+    BB.resistor(parts, H(5, 'e'), H(10, 'e'), NOM.R1);
+    jumper([10, 'd'], [10, 'g'], '#2e9d3a', st.gap2, 'J2');
+    BB.resistor(parts, H(10, 'h'), H(16, 'h'), NOM.R2);
+    BB.wire(parts, [H(16, 'j'), H(16, 'R-')], '#222');
+    BB.wire(parts, [H(24, 'R-'), H(24, 'L-')], '#222');
+    // part labels
+    const lab = (x, y, t, anchor = 'start') => { const g = S.el('g', { class: 'vtag' }, parts); const w = 8 + t.length * 7.2; const x0 = anchor === 'start' ? x : x - w; S.el('rect', { x: x0, y: y - 10, width: w, height: 20, rx: 5 }, g); S.el('text', { x: x0 + w / 2, y: y + 4.5, 'text-anchor': 'middle', text: t }, g); };
+    lab(H(7, 'e')[0] + 14, H(7, 'e')[1] + 9, 'R1');
+    lab(H(13, 'h')[0] + 14, H(13, 'h')[1], 'R2');
+    lab(H(6, 'c')[0] - 12, H(6, 'c')[1] + 24, 'SW1 ' + (st.sw ? 'ON' : 'OFF'), 'end');
+    // test points
+    const tps = S.el('g', {}, bsvg);
+    for (const [id, t] of Object.entries(TP)) {
+      if (!tpAvailable(id)) continue;
+      const [x, y] = H(...t.hole);
+      const g = S.el('g', { class: 'tp', 'data-tp': id }, tps);
+      const lx = t.side === 'left' ? 52 : 470, ly = y + (t.dy || 0);
+      const tagW = 34;
+      S.el('path', { d: `M${t.side === 'left' ? lx + tagW / 2 : lx - tagW / 2} ${ly} L${x} ${y}`, stroke: '#7b3fe4', 'stroke-width': 1.4, fill: 'none' }, g);
+      S.el('circle', { cx: x, cy: y, r: 14, fill: 'transparent' }, g);
+      S.el('circle', { cx: x, cy: y, r: 7.5, class: 'ring' }, g);
+      const tg = S.el('g', { class: 'tag' }, g);
+      S.el('rect', { x: lx - tagW / 2, y: ly - 9, width: tagW, height: 18, rx: 5 }, tg);
+      S.el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', text: id }, tg);
+      UI.makeFocusable(g, { label: `${t.desc}. Place the ${st.placing} probe here.`, onActivate: () => placeProbe(id) });
+      g.classList.add('tp');
+    }
+    // probes
+    const probe = (id, color, word) => {
+      if (!id || !tpAvailable(id)) return;
+      const [x, y] = H(...TP[id].hole);
+      const g = S.el('g', { 'aria-hidden': 'true', style: 'pointer-events:none' }, bsvg);
+      const dx = color === '#d63b32' ? -26 : 26;
+      S.el('path', { d: `M${x} ${y} L${x + dx * .45} ${y - 16}`, stroke: '#9aa1a8', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+      S.el('path', { d: `M${x + dx * .45} ${y - 16} L${x + dx} ${y - 44}`, stroke: color, 'stroke-width': 9, 'stroke-linecap': 'round' }, g);
+      const w = word.length * 7 + 10;
+      S.el('rect', { x: x + dx - w / 2, y: y - 66, width: w, height: 17, rx: 4, fill: color }, g);
+      S.el('text', { x: x + dx, y: y - 54, 'text-anchor': 'middle', text: word, style: 'font:800 10.5px system-ui,sans-serif;fill:#fff' }, g);
+    };
+    probe(st.red, '#d63b32', 'RED');
+    probe(st.black, '#1f2328', 'BLACK');
+  }
+
+  /* ---------- meter drawing ---------- */
+  const msvg = S.svg(300, 380, { role: 'img' });
+  $('#meter').append(msvg);
+  const DIAL = [{ k: 'OFF', label: 'OFF', a: -90 }, { k: 'V', label: 'V⎓', a: -30 }, { k: 'mA', label: 'mA⎓', a: 30 }, { k: 'O', label: 'Ω', a: 90 }];
+  function drawMeter(m) {
+    msvg.replaceChildren();
+    const E = (t, a, p = msvg) => S.el(t, a, p);
+    E('rect', { x: 4, y: 4, width: 292, height: 372, rx: 28, fill: '#f2b81c', stroke: '#b58200', 'stroke-width': 2 });
+    E('rect', { x: 22, y: 20, width: 256, height: 336, rx: 18, fill: '#2b2f36' });
+    // LCD
+    E('rect', { x: 40, y: 36, width: 220, height: 84, rx: 8, fill: '#c9d4c1', stroke: '#8a9783', 'stroke-width': 2 });
+    const disp = m.display;
+    const unitShown = /^-?[\d.]+$/.test(disp || '') || disp === 'OL' ? (m.unit || '') : '';
+    E('text', { x: 236, y: 98, 'text-anchor': 'end', text: disp || '', style: `font:700 ${disp && disp.length > 5 ? 38 : 46}px ui-monospace,Menlo,Consolas,monospace;fill:#1d241b` });
+    E('text', { x: 244, y: 112, 'text-anchor': 'end', text: disp && st.dial !== 'OFF' ? unitShown : '', style: 'font:800 14px system-ui,sans-serif;fill:#1d241b' });
+    if (st.dial !== 'OFF') E('text', { x: 50, y: 54, text: { V: 'DC V', mA: 'DC mA', O: 'OHM' }[st.dial], style: 'font:800 11px system-ui,sans-serif;fill:#1d241b' });
+    // dial
+    const cx = 150, cy = 214;
+    E('circle', { cx, cy, r: 52, fill: '#1c1f24', stroke: '#111' });
+    DIAL.forEach(d => {
+      const rad = (d.a - 90) * Math.PI / 180;
+      const on = d.k === st.dial;
+      E('text', { x: cx + Math.cos(rad) * 72, y: cy + Math.sin(rad) * 72 + 5, 'text-anchor': 'middle', text: d.label, style: `font:800 14px system-ui,sans-serif;fill:${on ? '#ffd21f' : '#c9d0d9'}` });
+      E('path', { d: `M${cx + Math.cos(rad) * 54} ${cy + Math.sin(rad) * 54} L${cx + Math.cos(rad) * 60} ${cy + Math.sin(rad) * 60}`, stroke: on ? '#ffd21f' : '#7d848c', 'stroke-width': 3 });
+    });
+    const cur = DIAL.find(d => d.k === st.dial), rad = (cur.a - 90) * Math.PI / 180;
+    E('circle', { cx, cy, r: 36, fill: '#3a4049' });
+    E('path', { d: `M${cx} ${cy} L${cx + Math.cos(rad) * 34} ${cy + Math.sin(rad) * 34}`, stroke: '#fff', 'stroke-width': 7, 'stroke-linecap': 'round' });
+    // jacks
+    const jacks = [{ k: 'mA', x: 70, label: 'mA' }, { k: 'COM', x: 150, label: 'COM' }, { k: 'VO', x: 230, label: 'VΩ' }];
+    jacks.forEach(j => {
+      E('circle', { cx: j.x, cy: 318, r: 15, fill: '#111', stroke: j.k === 'mA' ? '#d63b32' : '#7d848c', 'stroke-width': 3 });
+      E('text', { x: j.x, y: 296, 'text-anchor': 'middle', text: j.label, style: 'font:800 12px system-ui,sans-serif;fill:#c9d0d9' });
+      const plug = (j.k === 'COM') ? '#1f2328' : (j.k === st.jack ? '#d63b32' : null);
+      if (plug) { E('circle', { cx: j.x, cy: 318, r: 10, fill: plug, stroke: j.k === 'COM' ? '#888' : '#fff', 'stroke-width': 2 }); E('path', { d: `M${j.x} 328 L${j.x} 372`, stroke: plug, 'stroke-width': 7, 'stroke-linecap': 'round' }); }
+    });
+    E('text', { x: 70, y: 346, 'text-anchor': 'middle', text: 'FUSED 200mA', style: 'font:700 8px system-ui,sans-serif;fill:#c9d0d9' });
+    msvg.setAttribute('aria-label', `Multimeter. Dial: ${{ OFF: 'off', V: 'DC volts', mA: 'DC milliamps', O: 'ohms' }[st.dial]}. Red lead in the ${st.jack === 'mA' ? 'mA' : 'V ohm'} jack, black lead in COM. Display: ${disp ? UI.spokenUnits(disp + ' ' + unitShown) : 'blank'}.`);
+  }
+
+  /* ---------- controls ---------- */
+  const seg = (mount, opts, get, set) => {
+    const btns = opts.map(o => h('button', { type: 'button', 'aria-pressed': String(get() === o.k) }, o.label));
+    btns.forEach((b, i) => b.addEventListener('click', () => { set(opts[i].k); btns.forEach((x, j) => x.setAttribute('aria-pressed', String(get() === opts[j].k))); }));
+    mount.replaceChildren(...btns);
+    return () => btns.forEach((x, j) => x.setAttribute('aria-pressed', String(get() === opts[j].k)));
+  };
+  let lastNote = null;
+  const syncDial = seg($('#dial'), [{ k: 'OFF', label: 'OFF' }, { k: 'V', label: 'V⎓' }, { k: 'mA', label: 'mA⎓' }, { k: 'O', label: 'Ω' }], () => st.dial, k => {
+    if (k === st.dial) return;
+    if (st.red || st.black) { st.red = st.black = null; lastNote = { kind: 'info', title: 'Remove probes before changing modes', text: ' Turning the dial while the probes are connected can damage a meter, so the probes were lifted off. Place them again.' }; }
+    st.dial = k; update();
+  });
+  const syncJack = seg($('#jack'), [{ k: 'VO', label: 'VΩ' }, { k: 'mA', label: 'mA' }], () => st.jack, k => { st.jack = k; update(); });
+  const syncPlacing = seg($('#placing'), [{ k: 'red', label: 'Red' }, { k: 'black', label: 'Black' }], () => st.placing, k => { st.placing = k; drawBoard(); });
+
+  function fillSelects() {
+    for (const [sel, key] of [[$('#redSel'), 'red'], [$('#blackSel'), 'black']]) {
+      sel.replaceChildren(h('option', { value: '' }, 'Not placed'), ...Object.entries(TP).filter(([id]) => tpAvailable(id)).map(([id, t]) => h('option', { value: id }, t.desc)));
+      sel.value = st[key] && tpAvailable(st[key]) ? st[key] : '';
+    }
+  }
+  $('#redSel').addEventListener('change', e => { st.red = e.target.value || null; update(); });
+  $('#blackSel').addEventListener('change', e => { st.black = e.target.value || null; update(); });
+  $('#clearProbes').addEventListener('click', () => { st.red = st.black = null; update(); announce('Probes removed.'); });
+  function placeProbe(id) {
+    st[st.placing] = id;
+    announce(`${st.placing === 'red' ? 'Red' : 'Black'} probe on ${TP[id].desc}.`);
+    // next click places the other probe
+    st.placing = st.placing === 'red' ? 'black' : 'red'; syncPlacing();
+    update();
+    const el = bsvg.querySelector(`[data-tp="${id}"]`); if (el) el.focus();
+  }
+  $('#swBtn').addEventListener('click', () => { st.sw = !st.sw; $('#swBtn').textContent = 'Switch SW1: ' + (st.sw ? 'ON' : 'OFF'); update(); announce('Switch ' + (st.sw ? 'on' : 'off')); });
+  const gapBtn = (n) => {
+    const key = 'gap' + n, b = $('#g' + n + 'Btn');
+    b.addEventListener('click', () => {
+      st[key] = !st[key];
+      b.textContent = st[key] ? `Close gap ${n} (replace jumper J${n})` : `Open gap ${n} (lift jumper J${n})`;
+      if (!st[key]) { for (const p of ['red', 'black']) if (st[p] && TP[st[p]].gap === n) st[p] = null; }
+      update();
+      announce(st[key] ? `Jumper J${n} lifted. Gap ${n} is open, and its two ends are now test points ${n}A and ${n}B.` : `Jumper J${n} replaced. Gap ${n} closed.`);
+    });
+  };
+  gapBtn(1); gapBtn(2);
+  $('#resetFuse').addEventListener('click', () => { st.fuse = false; st.red = st.black = null; update(); announce('Fuse replaced. Probes removed.'); });
+
+  /* ---------- tasks + data ---------- */
+  const TASKS = [
+    { k: 'V1', text: 'Measure the voltage across R1.', unit: 'V', q: 'Voltage across R1' },
+    { k: 'V2', text: 'Measure the voltage across R2.', unit: 'V', q: 'Voltage across R2' },
+    { k: 'I', text: 'Measure the current in the circuit.', unit: 'mA', q: 'Circuit current' },
+    { k: 'R1', text: 'Measure the resistance of R1.', unit: 'Ω', q: 'Resistance of R1' }
+  ];
+  let meas;
+  $('#record').addEventListener('click', () => {
+    if (!meas || !meas.task) return;
+    let v = meas.value;
+    if (meas.task === 'I' || meas.task === 'V1' || meas.task === 'V2') v = Math.abs(v);
+    st.data[meas.task] = v;
+    announce(`Recorded: ${TASKS.find(t => t.k === meas.task).q}, ${v} ${TASKS.find(t => t.k === meas.task).unit}.`);
+    drawTasks(); drawTable();
+  });
+  function drawTasks() {
+    $('#tasks').replaceChildren(...TASKS.map((t, i) => {
+      const done = st.data[t.k] != null;
+      return h('li', { class: done ? 'done' : '' }, h('span', { class: 'box', 'aria-hidden': 'true' }, done ? '' : i + 1), h('span', { class: 't' }, t.text, done ? h('span', { class: 'sr-only' }, ' (done)') : null));
+    }));
+  }
+  function drawTable() {
+    const rows = TASKS.map(t => {
+      const inp = h('input', { type: 'text', inputmode: 'decimal', 'aria-label': `Predicted ${t.q} in ${t.unit}`, value: st.pred[t.k] ?? '' });
+      inp.addEventListener('change', () => { st.pred[t.k] = inp.value; drawTable(); });
+      const p = parseFloat(String(st.pred[t.k] ?? '').replace(',', '.')), m = st.data[t.k];
+      const diff = isFinite(p) && p !== 0 && m != null ? ((m - p) / p * 100) : null;
+      return h('tr', {}, h('td', {}, t.q), h('td', { class: 'num' }, inp), h('td', { class: 'num' }, m != null ? String(m) : '—'), h('td', {}, t.unit), h('td', { class: 'num' }, diff == null ? '—' : (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%'));
+    });
+    $('#table tbody').replaceChildren(...rows);
+    const all = TASKS.every(t => st.data[t.k] != null);
+    const box = $('#errors');
+    if (!all) { box.replaceChildren(); return; }
+    if (box.dataset.built) return;
+    box.dataset.built = '1';
+    const SRC = ['Resistor tolerance (real resistors are within ±5% of their label)', 'The battery is not exactly 9.0 V', 'The meter shows only 3 digits (resolution)', 'Poor probe contact', 'The meter itself slightly changes the circuit'];
+    const checks = SRC.map(s => h('label', {}, h('input', { type: 'checkbox' }), s));
+    const out = h('div');
+    box.append(h('h3', {}, 'Why don’t measured and predicted values match exactly?'), h('p', { class: 'small muted', style: 'margin:0' }, 'Choose the error sources that could explain your differences.'),
+      h('div', { class: 'err-list' }, checks), h('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => {
+        out.replaceChildren(feedback('info', 'This session’s actual parts', ` All of these can contribute. Here the parts were: R1 = ${PARTS.R1} Ω (${pct(PARTS.R1, NOM.R1)} from its label), R2 = ${PARTS.R2} Ω (${pct(PARTS.R2, NOM.R2)}), battery = ${PARTS.Vb.toFixed(2)} V. The meter also has a small internal resistance, which lowers current readings slightly. Differences of a few percent are normal; a big difference usually means a setup mistake.`));
+      } }, 'Show the actual parts'), out);
+  }
+  const pct = (a, b) => { const d = (a - b) / b * 100; return (d >= 0 ? '+' : '') + d.toFixed(1) + '%'; };
+  $('#csv').addEventListener('click', () => downloadCSV('multimeter-lab-data.csv', [['Quantity', 'Predicted', 'Measured', 'Unit', '% difference'],
+    ...TASKS.map(t => { const p = parseFloat(String(st.pred[t.k] ?? '')), m = st.data[t.k]; return [t.q, st.pred[t.k] ?? '', m ?? '', t.unit === 'Ω' ? 'ohm' : t.unit, isFinite(p) && p && m != null ? ((m - p) / p * 100).toFixed(1) : '']; })]));
+
+  /* ---------- update ---------- */
+  function update() {
+    fillSelects(); syncDial(); syncJack();
+    meas = measure();
+    drawBoard(); drawMeter(meas);
+    const box = $('#msg');
+    const items = [...(lastNote ? [lastNote] : []), ...meas.msgs];
+    lastNote = null;
+    box.replaceChildren(...items.map(m => feedback(m.kind, m.title, m.text)));
+    $('#record').disabled = !meas.task;
+    $('#record').textContent = meas.task ? `Record: ${TASKS.find(t => t.k === meas.task).q}` : 'Record reading';
+    $('#resetFuse').hidden = !st.fuse;
+    if (meas.display && !firstRun) announce(`Meter reads ${UI.spokenUnits(meas.display + ' ' + (meas.unit || ''))}.`);
+    firstRun = false;
+  }
+  let firstRun = true;
+  update(); drawTasks(); drawTable();
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> The meter&rsquo;s mode and its placement depend on what you are measuring. Voltmeters go in parallel, ammeters go in series, and resistance is measured with the power off.</p>
+    <p><strong>Time:</strong> about 3&ndash;5 minutes.</p>
+    <ul>
+      <li>Each visit picks slightly different &ldquo;real&rdquo; parts: resistors within &plusmn;5% of their labels, and a battery between 8.6 V and 9.4 V. Measurements then differ a little from predictions, which gives students real error sources to discuss.</li>
+      <li>Nominal predictions: I = 9 V &divide; 3.2 k&Omega; &asymp; 2.81 mA, V<sub>R1</sub> &asymp; 2.81 V, V<sub>R2</sub> &asymp; 6.19 V, R1 = 1.00 k&Omega;.</li>
+      <li>The wrong setups follow real physics. An ammeter placed across a single resistor here only bypasses that resistor (the reading changes, nothing is damaged). An ammeter across the battery, or across the switch and both resistors, is a near short circuit, and that is when the fuse blows. A voltmeter in series stops the circuit and reads about the full battery voltage.</li>
+      <li>The tool shows these setups to explain what goes wrong. They are not procedures to copy on real equipment.</li>
+      <li>Keyboard: every setting has a button or a menu, and the test points on the board are focusable (Enter places the selected probe).</li>
+      <li>Suggested tie-in: run this before the first real meter lab, then have students fill in the same table with real measurements.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Series vs. Parallel Sorter</title>
+<meta name="description" content="Sort circuit cards into series, parallel or combined by tracing their current paths.">
+<style>
+  .bins { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 10px 0; background: var(--bg); }
+  .bin { border: 2px dashed var(--line); border-radius: 12px; background: var(--surface); padding: 8px 12px; display: flex; gap: 10px; align-items: center; min-height: 64px; transition: border-color .15s, background-color .15s; }
+  .bin svg { width: 46px; height: 32px; flex: none; }
+  .bin .name { font-weight: 800; }
+  .bin .count { font-size: .85rem; color: var(--ink-2); }
+  .bin.over { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .bin-def { font-size: .82rem; color: var(--ink-2); line-height: 1.3; }
+  @media (max-width: 700px) { .bin-def, .bin svg { display: none; } .bin { min-height: 52px; padding: 6px 8px; } }
+  .progress { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 4px 0 12px; font-weight: 600; }
+  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .card.done { border: 2px solid var(--ok); }
+  .card-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .card-head h2 { font-size: 1.05rem; margin: 0; }
+  .grip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); font-size: .85rem; font-weight: 700; color: var(--ink-2); cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
+  .grip:active { cursor: grabbing; }
+  .grip svg { width: 14px; height: 14px; }
+  .card .stage svg { aspect-ratio: auto; }
+  .card-cap { font-size: .9rem; min-height: 2.6em; color: var(--ink); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; }
+  .sort-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .sort-row .lbl { font-size: .85rem; font-weight: 700; color: var(--ink-2); margin-right: 2px; }
+  .sort-row .btn { flex: 1 1 auto; }
+  .badge { display: inline-flex; gap: 6px; align-items: center; font-size: .85rem; font-weight: 800; color: var(--ok); }
+  body.dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+  .ghost { position: fixed; z-index: 100; pointer-events: none; padding: 8px 14px; border-radius: 10px; background: var(--ink); color: var(--surface); font-weight: 800; box-shadow: 0 8px 24px rgb(0 0 0 / .25); translate: -50% -120%; }
+  .trace-hl { fill: none; stroke: #7b3fe4; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; opacity: .3; }
+  .summary { margin: 16px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Series vs. Parallel Sorter</h1>
+      <p class="lede">Sort each circuit into Series, Parallel or Combined. Drag a card by its handle onto a bin, or use the Sort buttons. Stuck? Trace the current paths and count them.</p>
+    </div>
+    <div class="head-tools"><button class="btn" id="shuffle" type="button">Shuffle and restart</button></div>
+  </header>
+
+  <main>
+    <div class="bins" id="bins" role="group" aria-label="Bins"></div>
+    <div class="progress" id="progress" aria-live="polite"></div>
+    <div class="summary" id="summary"></div>
+    <div class="cards" id="cards"></div>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, $$, feedback, about, announce, shuffle, motion } = UI;
+  const S = Schem;
+  const BINS = [
+    { key: 'series', name: 'Series', def: 'One path. Every part carries the same current.',
+      icon: '<svg viewBox="0 0 46 32" aria-hidden="true"><rect x="4" y="4" width="38" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M14 4v-0M18 1l3 6 3-6 3 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: 'parallel', name: 'Parallel', def: 'Two or more separate paths, each across the same two points.',
+      icon: '<svg viewBox="0 0 46 32" aria-hidden="true"><path d="M4 4H42M4 28H42M4 4V28M23 4V28M42 4V28" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>' },
+    { key: 'combined', name: 'Combined', def: 'Some parts in series with a parallel group.',
+      icon: '<svg viewBox="0 0 46 32" aria-hidden="true"><path d="M4 4H42M4 28H42M4 4V28M28 4V28M42 4V28" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M9 4l2-3 2 6 2-6 2 6 2-3" fill="#fff" stroke="currentColor" stroke-width="2"/></svg>' }
+  ];
+  const BIN_NAME = { series: 'Series', parallel: 'Parallel', combined: 'Combined' };
+
+  /* ---------- circuit cards ----------
+     wires: [node, pts]; parts: [kind, label, x1, y1, x2, y2]; kind R=resistor, L=lamp
+     battery is always drawn on the left edge, + at (30,50), − at (30,120)
+     net: engine netlist (9 V battery between p and g)
+     bb: breadboard parts: ['w', from, to, color] | ['r', from, to, ohms] | ['l', from, to]   (from/to = [row, col])
+  */
+  const LOOP = [[30, 50], [30, 25], [210, 25], [210, 145], [30, 145], [30, 120]];
+  const CARDS = [
+    { id: 'S1', type: 'series',
+      wires: [['p', [[30, 50], [30, 25], [85, 25]]], ['a', [[145, 25], [210, 25], [210, 55]]], ['g', [[210, 115], [210, 145], [30, 145], [30, 120]]]],
+      parts: [['L', 'Bulb 1', 85, 25, 145, 25, 115, 58, 'middle'], ['L', 'Bulb 2', 210, 55, 210, 115, 188, 89, 'end']],
+      net: [['L', 'L1', 'p', 'a'], ['L', 'L2', 'a', 'g']],
+      paths: [{ pts: LOOP, text: 'Path 1 goes through Bulb 1, then Bulb 2, then back to the battery.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['l', [2, 'c'], [6, 'c']], ['l', [6, 'e'], [10, 'e']], ['w', [10, 'a'], [10, 'L-'], '#222']],
+      desc: 'A battery, Bulb 1 and Bulb 2 connected one after another in a single loop.',
+      explain: 'There is only one path: through Bulb 1, then Bulb 2. Every part carries the same current.' },
+    { id: 'S2', type: 'series',
+      wires: [['p', [[30, 50], [30, 25], [80, 25]]], ['a', [[160, 25], [210, 25], [210, 50]]], ['b', [[210, 120], [210, 145], [160, 145]]], ['g', [[80, 145], [30, 145], [30, 120]]]],
+      parts: [['R', 'R1', 80, 25, 160, 25, 120, 52, 'middle'], ['R', 'R2', 210, 50, 210, 120, 190, 89, 'end'], ['R', 'R3', 160, 145, 80, 145, 120, 128, 'middle']],
+      net: [['R', 'R1', 'p', 'a'], ['R', 'R2', 'a', 'b'], ['R', 'R3', 'b', 'g']],
+      paths: [{ pts: LOOP, text: 'Path 1 goes through R1, R2 and R3, one after another.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['r', [2, 'c'], [5, 'c'], 1000], ['r', [5, 'd'], [5, 'g'], 1000], ['r', [5, 'h'], [9, 'h'], 1000], ['w', [9, 'g'], [9, 'd'], '#e3b100'], ['w', [9, 'a'], [9, 'L-'], '#222']],
+      desc: 'A battery and three resistors spread around one loop: R1 on top, R2 on the right side, R3 on the bottom.',
+      explain: 'The resistors are spread around the loop, but there is still only one path. Spreading parts out does not make a circuit parallel.' },
+    { id: 'S3', type: 'series', trick: true,
+      wires: [['p', [[30, 50], [30, 25], [110, 25], [110, 45]]], ['a', [[110, 115], [110, 135], [180, 135], [180, 115]]], ['g', [[180, 45], [180, 25], [215, 25], [215, 155], [30, 155], [30, 120]]]],
+      parts: [['R', 'R1', 110, 45, 110, 115, 96, 84, 'end'], ['R', 'R2', 180, 115, 180, 45, 166, 84, 'end']],
+      net: [['R', 'R1', 'p', 'a'], ['R', 'R2', 'a', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [110, 25], [110, 135], [180, 135], [180, 25], [215, 25], [215, 155], [30, 155], [30, 120]], text: 'Path 1 goes down through R1, along the bottom link, up through R2, and around back to the battery.' }],
+      bb: [['w', [3, 'L+'], [3, 'a'], '#d63b32'], ['r', [3, 'c'], [7, 'c'], 1000], ['w', [7, 'e'], [7, 'f'], '#2e9d3a'], ['r', [7, 'h'], [3, 'h'], 1000], ['w', [3, 'i'], [10, 'i'], '#e3b100'], ['w', [10, 'f'], [10, 'e'], '#2e9d3a'], ['w', [10, 'a'], [10, 'L-'], '#222']],
+      desc: 'Two resistors drawn side by side like ladder rungs. The positive wire reaches only the top of R1. The bottom of R1 connects to the bottom of R2, and the top of R2 connects around to the negative terminal.',
+      explain: 'It looks like a ladder, but follow the wire: current must go through R1 and then R2. There is only one path, so it is series.' },
+    { id: 'P1', type: 'parallel',
+      wires: [['p', [[30, 50], [30, 25], [190, 25]]], ['p', [[110, 25], [110, 55]]], ['p', [[190, 25], [190, 55]]], ['g', [[110, 115], [110, 145]]], ['g', [[190, 115], [190, 145], [30, 145], [30, 120]]]],
+      parts: [['L', 'Bulb 1', 110, 55, 110, 115, 90, 89, 'end'], ['L', 'Bulb 2', 190, 55, 190, 115, 170, 89, 'end']],
+      junctions: [[110, 25, 'p'], [110, 145, 'g']],
+      net: [['L', 'L1', 'p', 'g'], ['L', 'L2', 'p', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [110, 25], [110, 145], [30, 145], [30, 120]], text: 'Path 1 goes through Bulb 1 only.' },
+              { pts: [[30, 50], [30, 25], [190, 25], [190, 145], [30, 145], [30, 120]], text: 'Path 2 goes through Bulb 2 only.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['w', [9, 'L-'], [9, 'a'], '#222'], ['l', [2, 'c'], [9, 'c']], ['l', [2, 'e'], [9, 'e']]],
+      desc: 'Two bulbs on separate rungs. The top of each bulb connects to the positive wire and the bottom of each bulb connects to the negative wire.',
+      explain: 'Each bulb has its own path from + to −. Two separate paths make it parallel.' },
+    { id: 'P2', type: 'parallel',
+      wires: [['p', [[30, 50], [30, 25], [200, 25]]], ...[90, 145, 200].map(x => ['p', [[x, 25], [x, 50]]]), ...[90, 145].map(x => ['g', [[x, 120], [x, 145]]]), ['g', [[200, 120], [200, 145], [30, 145], [30, 120]]]],
+      parts: [['R', 'R1', 90, 50, 90, 120, 76, 89, 'end'], ['R', 'R2', 145, 50, 145, 120, 131, 89, 'end'], ['R', 'R3', 200, 50, 200, 120, 186, 89, 'end']],
+      junctions: [[90, 25, 'p'], [145, 25, 'p'], [90, 145, 'g'], [145, 145, 'g']],
+      net: [['R', 'R1', 'p', 'g'], ['R', 'R2', 'p', 'g'], ['R', 'R3', 'p', 'g']],
+      paths: [90, 145, 200].map((x, i) => ({ pts: [[30, 50], [30, 25], [x, 25], [x, 145], [30, 145], [30, 120]], text: `Path ${i + 1} goes through R${i + 1} only.` })),
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['w', [8, 'L-'], [8, 'a'], '#222'], ['r', [2, 'c'], [8, 'c'], 1000], ['r', [2, 'd'], [8, 'd'], 1000], ['r', [2, 'e'], [8, 'e'], 1000]],
+      desc: 'Three resistors on three separate rungs between the positive wire and the negative wire.',
+      explain: 'Three separate paths, one through each resistor. Each resistor connects across the same two points.' },
+    { id: 'P3', type: 'parallel', trick: true,
+      wires: [['p', [[30, 50], [30, 25], [205, 25]]], ['p', [[60, 25], [60, 85]]], ['p', [[205, 25], [205, 85]]], ['g', [[132, 85], [132, 145], [30, 145], [30, 120]]]],
+      parts: [['R', 'R1', 60, 85, 132, 85, 96, 70, 'middle'], ['R', 'R2', 132, 85, 205, 85, 168, 70, 'middle']],
+      junctions: [[60, 25, 'p'], [132, 85, 'g']],
+      net: [['R', 'R1', 'p', 'g'], ['R', 'R2', 'p', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [60, 25], [60, 85], [132, 85], [132, 145], [30, 145], [30, 120]], text: 'Path 1 goes down the left wire, through R1 toward the middle, then down to the negative wire.' },
+              { pts: [[30, 50], [30, 25], [205, 25], [205, 85], [132, 85], [132, 145], [30, 145], [30, 120]], text: 'Path 2 goes along the top, down the right wire, through R2 toward the middle, then down to the negative wire.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['r', [2, 'c'], [6, 'c'], 1000], ['w', [6, 'a'], [6, 'L-'], '#222'], ['r', [6, 'd'], [10, 'd'], 1000], ['w', [10, 'a'], [10, 'L+'], '#d63b32']],
+      desc: 'Two resistors drawn end to end in one straight line. Both outer ends connect to the positive wire, and the middle point between them connects to the negative wire.',
+      explain: 'They sit in a line, but each resistor connects between + (an outer end) and − (the middle). That gives two separate paths, so it is parallel.' },
+    { id: 'C1', type: 'combined',
+      wires: [['p', [[30, 50], [30, 25], [60, 25]]], ['n', [[120, 25], [205, 25]]], ['n', [[150, 25], [150, 50]]], ['n', [[205, 25], [205, 50]]], ['g', [[150, 120], [150, 145]]], ['g', [[205, 120], [205, 145], [30, 145], [30, 120]]]],
+      parts: [['R', 'R1', 60, 25, 120, 25, 90, 52, 'middle'], ['R', 'R2', 150, 50, 150, 120, 136, 89, 'end'], ['R', 'R3', 205, 50, 205, 120, 191, 89, 'end']],
+      junctions: [[150, 25, 'n'], [150, 145, 'g']],
+      net: [['R', 'R1', 'p', 'n'], ['R', 'R2', 'n', 'g'], ['R', 'R3', 'n', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [150, 25], [150, 145], [30, 145], [30, 120]], text: 'Path 1 goes through R1, then R2.' },
+              { pts: [[30, 50], [30, 25], [205, 25], [205, 145], [30, 145], [30, 120]], text: 'Path 2 goes through R1, then R3.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['r', [2, 'c'], [5, 'c'], 1000], ['r', [5, 'b'], [10, 'b'], 1000], ['r', [5, 'e'], [10, 'e'], 1000], ['w', [10, 'a'], [10, 'L-'], '#222']],
+      desc: 'R1 sits in the main wire from the positive terminal. After R1, the wire splits into two rungs, R2 and R3, which rejoin at the negative wire.',
+      explain: 'Every path goes through R1 (series part), but then splits between R2 and R3 (parallel part). That makes it combined.' },
+    { id: 'C2', type: 'combined',
+      wires: [['p', [[30, 50], [30, 25], [55, 25]]], ['n', [[115, 25], [205, 25]]], ['g', [[150, 145], [30, 145], [30, 120]]], ['g', [[205, 145], [150, 145]]]],
+      parts: [['L', 'Bulb', 55, 25, 115, 25, 85, 58, 'middle'], ['R', 'R1', 150, 25, 150, 85, 136, 58, 'end'], ['R', 'R2', 150, 85, 150, 145, 136, 120, 'end'], ['R', 'R3', 205, 25, 205, 145, 191, 89, 'end']],
+      junctions: [[150, 25, 'n'], [150, 145, 'g']],
+      net: [['L', 'L1', 'p', 'n'], ['R', 'R1', 'n', 'm'], ['R', 'R2', 'm', 'g'], ['R', 'R3', 'n', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [150, 25], [150, 145], [30, 145], [30, 120]], text: 'Path 1 goes through the bulb, then R1, then R2.' },
+              { pts: [[30, 50], [30, 25], [205, 25], [205, 145], [30, 145], [30, 120]], text: 'Path 2 goes through the bulb, then R3.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['l', [2, 'c'], [5, 'c']], ['r', [5, 'b'], [8, 'b'], 1000], ['r', [8, 'c'], [11, 'c'], 1000], ['r', [5, 'e'], [11, 'e'], 1000], ['w', [11, 'a'], [11, 'L-'], '#222']],
+      desc: 'A bulb in the main wire from the positive terminal. After the bulb, the wire splits: one branch has R1 and R2 one after another, and the other branch has R3. The branches rejoin at the negative wire.',
+      explain: 'All current passes through the bulb (series part), then splits between the R1–R2 branch and the R3 branch (parallel part). Combined.' },
+    { id: 'C3', type: 'combined', trick: true,
+      wires: [['p', [[30, 50], [30, 25], [70, 25]]], ['p', [[55, 25], [55, 75], [70, 75]]], ['n', [[150, 25], [210, 25], [210, 55]]], ['n', [[150, 75], [165, 75], [165, 25]]], ['g', [[210, 125], [210, 145], [30, 145], [30, 120]]]],
+      parts: [['R', 'R2', 70, 25, 150, 25, 110, 50, 'middle'], ['R', 'R3', 70, 75, 150, 75, 110, 100, 'middle'], ['R', 'R1', 210, 55, 210, 125, 196, 94, 'end']],
+      junctions: [[55, 25, 'p'], [165, 25, 'n']],
+      net: [['R', 'R2', 'p', 'n'], ['R', 'R3', 'p', 'n'], ['R', 'R1', 'n', 'g']],
+      paths: [{ pts: [[30, 50], [30, 25], [210, 25], [210, 145], [30, 145], [30, 120]], text: 'Path 1 goes through R2, then R1.' },
+              { pts: [[30, 50], [30, 25], [55, 25], [55, 75], [165, 75], [165, 25], [210, 25], [210, 145], [30, 145], [30, 120]], text: 'Path 2 goes through R3, then R1.' }],
+      bb: [['w', [2, 'L+'], [2, 'a'], '#d63b32'], ['r', [2, 'c'], [6, 'c'], 1000], ['r', [2, 'e'], [6, 'e'], 1000], ['r', [6, 'b'], [10, 'b'], 1000], ['w', [10, 'a'], [10, 'L-'], '#222']],
+      desc: 'Right after the positive terminal, the wire splits into two branches stacked one above the other: R2 on top, R3 below. They rejoin, and then the current passes through R1 on the right side before returning to the negative terminal.',
+      explain: 'R2 and R3 are in parallel with each other, and that pair is in series with R1. R1 just comes last instead of first. Combined.' }
+  ];
+
+  /* ---------- drawing ---------- */
+  function solveCard(c) {
+    const parts = [{ id: 'BAT', type: 'vsource', pos: 'p', neg: 'g', V: 9 }, ...c.net.map(([k, id, a, b]) => ({ id, type: k === 'L' ? 'lamp' : 'resistor', a, b, R: k === 'L' ? 50 : 1000 }))];
+    return Engine.solve(parts);
+  }
+  function drawSchematic(c) {
+    const r = solveCard(c);
+    const svg = S.svg(240, 170, { role: 'img' });
+    const col = n => S.vColor(r.V[n] ?? 0, 9);
+    c.wires.forEach(([n, pts]) => S.wire(svg, pts, col(n)));
+    const nodeAt = (x, y) => { // find the node of the wire touching this point (for lead colors)
+      for (const [n, pts] of c.wires) if (pts.some(p => Math.abs(p[0] - x) < 1 && Math.abs(p[1] - y) < 1)) return n;
+      if (x === 30 && y === 50) return 'p'; return 'g';
+    };
+    c.parts.forEach(([k, label, x1, y1, x2, y2, lx, ly, anchor]) => {
+      const o = { ca: col(nodeAt(x1, y1)), cb: col(nodeAt(x2, y2)) };
+      if (k === 'R') S.resistor(svg, x1, y1, x2, y2, o); else S.lamp(svg, x1, y1, x2, y2, o);
+      S.label(svg, lx, ly, label, { anchor });
+    });
+    (c.junctions || []).forEach(([x, y, n]) => S.junction(svg, x, y, col(n)));
+    S.battery(svg, 30, 120, 30, 50, { cneg: col('g'), cpos: col('p'), markSide: 'left' });
+    svg.setAttribute('aria-label', 'Schematic: ' + c.desc);
+    return svg;
+  }
+  function drawBreadboard(c) {
+    const svg = S.svg(430, 262, { role: 'img' });
+    const board = new BB.Breadboard(svg, { rows: 12, x: 84, y: 2 });
+    const bat = BB.battery9v(svg, 8, 120);
+    const H = (r, col) => board.hole(r, col);
+    BB.lead(svg, bat.pos, H(1, 'L+'), '#d63b32', { bend: 50, by: 0, bx: -40, down: false });
+    BB.lead(svg, bat.neg, H(2, 'L-'), '#222', { bend: 24, by: 0, bx: -30, down: false });
+    const layer = S.el('g', {}, svg);
+    for (const p of c.bb) {
+      if (p[0] === 'w') BB.wire(layer, [H(...p[1]), H(...p[2])], p[3]);
+      else if (p[0] === 'r') BB.resistor(layer, H(...p[1]), H(...p[2]), p[3]);
+      else if (p[0] === 'l') BB.bulb(layer, H(...p[1]), H(...p[2]), { lit: true });
+    }
+    svg.setAttribute('aria-label', 'Breadboard view of the same circuit: ' + c.desc);
+    return svg;
+  }
+
+  /* ---------- trace current paths ---------- */
+  function trace(cardEl, c, view) {
+    const ui = cardEl._ui;
+    if (ui.tracing) return;
+    ui.setView('schematic');
+    const svg = ui.stage.querySelector('svg');
+    const layer = S.el('g', {}, svg);
+    const flow = new DotFlow(S.el('g', {}, layer), { speed: 70, refCurrent: 1, refSpacing: 22 });
+    ui.tracing = true; ui.traceBtn.disabled = true;
+    let k = 0;
+    const show = () => {
+      layer.querySelectorAll('.trace-hl').forEach(e => e.remove());
+      flow.clear();
+      if (k >= c.paths.length) {
+        flow.stop(); layer.remove(); ui.tracing = false; ui.traceBtn.disabled = false;
+        const n = c.paths.length;
+        ui.cap.textContent = `${n === 1 ? 'Only one path' : n + ' separate paths'} from + back to −. ` + c.paths.map(p => p.text).join(' ');
+        return;
+      }
+      const p = c.paths[k];
+      const hl = S.el('path', { class: 'trace-hl', d: p.pts.map((q, i) => (i ? 'L' : 'M') + q[0] + ' ' + q[1]).join(' ') });
+      layer.insertBefore(hl, layer.firstChild);
+      flow.add('p' + k, p.pts, () => 1);
+      flow.setMotion(motion.on); flow.start();
+      ui.cap.textContent = `Path ${k + 1} of ${c.paths.length}: ${p.text}`;
+      k++;
+      setTimeout(show, 3000);
+    };
+    show();
+  }
+
+  /* ---------- state ---------- */
+  let order, state;
+  const cardsEl = $('#cards');
+
+  function buildBins() {
+    $('#bins').replaceChildren(...BINS.map(b => h('div', { class: 'bin', 'data-bin': b.key },
+      h('span', { html: b.icon, style: 'display:inline-flex;color:var(--ink)' }),
+      h('div', {}, h('div', { class: 'name' }, b.name), h('div', { class: 'bin-def' }, b.def), h('div', { class: 'count', 'data-count': b.key }, '0 sorted')))));
+  }
+
+  function buildCards() {
+    cardsEl.replaceChildren();
+    order.forEach((c, i) => {
+      const num = i + 1;
+      const stage = h('div', { class: 'stage' });
+      const cap = h('div', { class: 'card-cap', 'aria-live': 'polite' }, 'Read the paths: where can current go from + to −?');
+      const fb = h('div');
+      const segS = h('button', { type: 'button', 'aria-pressed': 'true' }, 'Schematic');
+      const segB = h('button', { type: 'button', 'aria-pressed': 'false' }, 'Breadboard');
+      const traceBtn = h('button', { class: 'btn btn-small', type: 'button' }, 'Trace current path');
+      const grip = h('span', { class: 'grip', 'aria-hidden': 'true', html: '<svg viewBox="0 0 14 14"><g fill="currentColor"><circle cx="4" cy="3" r="1.5"/><circle cx="10" cy="3" r="1.5"/><circle cx="4" cy="7" r="1.5"/><circle cx="10" cy="7" r="1.5"/><circle cx="4" cy="11" r="1.5"/><circle cx="10" cy="11" r="1.5"/></g></svg>Drag' });
+      const sortBtns = BINS.map(b => h('button', { class: 'btn btn-small', type: 'button', 'data-sort': b.key, 'aria-label': `Sort Circuit ${num} as ${b.name}` }, b.name));
+      const title = h('h2', { id: 'card-t-' + c.id }, `Circuit ${num}`);
+      const el = h('article', { class: 'card', 'data-id': c.id, 'aria-labelledby': 'card-t-' + c.id, tabindex: '0' },
+        h('div', { class: 'card-head' }, title, h('div', { class: 'row' }, h('span', { class: 'badge', 'data-badge': '' }), grip)),
+        h('div', { class: 'row', style: 'justify-content:space-between' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'View' }, segS, segB), traceBtn),
+        stage, cap,
+        h('div', { class: 'sort-row', role: 'group', 'aria-label': 'Sort this circuit' }, h('span', { class: 'lbl' }, 'Sort as:'), ...sortBtns),
+        fb);
+      const setView = v => {
+        segS.setAttribute('aria-pressed', String(v === 'schematic')); segB.setAttribute('aria-pressed', String(v === 'breadboard'));
+        stage.replaceChildren(v === 'schematic' ? drawSchematic(c) : drawBreadboard(c));
+      };
+      el._ui = { stage, cap, fb, traceBtn, setView, sortBtns, grip, num };
+      segS.addEventListener('click', () => { if (!el._ui.tracing) setView('schematic'); });
+      segB.addEventListener('click', () => { if (!el._ui.tracing) setView('breadboard'); });
+      traceBtn.addEventListener('click', () => trace(el, c));
+      sortBtns.forEach(b => b.addEventListener('click', () => sortCard(c, b.dataset.sort)));
+      el.addEventListener('keydown', e => { if (['1', '2', '3'].includes(e.key) && e.target.closest('.card') === el) { sortCard(c, BINS[+e.key - 1].key); } });
+      attachDrag(grip, c, num);
+      setView('schematic');
+      cardsEl.append(el);
+    });
+  }
+
+  function sortCard(c, bin) {
+    const s = state[c.id];
+    if (s.done) return;
+    s.attempts++;
+    const el = cardsEl.querySelector(`[data-id="${c.id}"]`), ui = el._ui;
+    if (bin === c.type) {
+      s.done = true;
+      if (s.attempts === 1) s.firstTry = true;
+      el.classList.add('done');
+      el.querySelector('[data-badge]').innerHTML = '';
+      el.querySelector('[data-badge]').append(h('span', { html: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>', style: 'display:inline-flex' }), BIN_NAME[c.type]);
+      ui.fb.replaceChildren(feedback('ok', `Correct: ${BIN_NAME[c.type]}`, ' ' + c.explain));
+      ui.sortBtns.forEach(b => { b.disabled = true; });
+      announce(`Circuit ${ui.num}: correct, ${BIN_NAME[c.type]}. ${c.explain}`);
+    } else {
+      const hint = bin === 'series' ? 'Is there really only one path? Trace the current and count the paths.'
+        : bin === 'parallel' ? 'Does every part have its own path from + to −? Check whether all the current must pass through any one part.'
+        : 'Is there a part that every path goes through, plus a split somewhere else? Trace the paths and check.';
+      ui.fb.replaceChildren(feedback('bad', `Not ${BIN_NAME[bin]}`, ' ' + hint));
+      announce(`Circuit ${ui.num}: not ${BIN_NAME[bin]}. ${hint}`);
+    }
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const vals = Object.values(state);
+    const done = vals.filter(s => s.done).length, first = vals.filter(s => s.firstTry).length;
+    $('#progress').textContent = `Sorted: ${done} of ${order.length} · Correct on the first try: ${first}`;
+    for (const b of BINS) {
+      const n = order.filter(c => c.type === b.key && state[c.id].done).length;
+      $(`[data-count="${b.key}"]`).textContent = n + ' sorted';
+    }
+    if (done === order.length) {
+      const missed = order.map((c, i) => ({ c, i })).filter(({ c }) => !state[c.id].firstTry);
+      const box = $('#summary');
+      box.replaceChildren(feedback('ok', `All ${order.length} circuits sorted`,
+        ` You got ${first} of ${order.length} on the first try. ` + (missed.length ? 'Worth another look: ' + missed.map(({ c, i }) => `Circuit ${i + 1} (${BIN_NAME[c.type]})`).join(', ') + '. ' : 'Nothing missed. ') +
+        'Key idea: a circuit’s type comes from its current paths, not from where the parts sit on the page.'),
+        h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: restart }, 'Shuffle and try again')));
+      box.scrollIntoView({ behavior: motion.on ? 'smooth' : 'auto', block: 'center' });
+    } else $('#summary').replaceChildren();
+  }
+
+  /* ---------- drag and drop (pointer) ---------- */
+  function attachDrag(grip, c, num) {
+    let start = null, ghost = null, over = null;
+    const binAt = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest('.bin'); };
+    grip.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || state[c.id].done) return;
+      e.preventDefault();
+      start = [e.clientX, e.clientY];
+      document.body.classList.add('dragging');
+      grip.setPointerCapture(e.pointerId);
+    });
+    grip.addEventListener('pointermove', e => {
+      if (!start || !grip.hasPointerCapture(e.pointerId)) return;
+      if (!ghost && Math.hypot(e.clientX - start[0], e.clientY - start[1]) < 4) return;
+      if (!ghost) { ghost = h('div', { class: 'ghost', 'aria-hidden': 'true' }, `Circuit ${num}`); document.body.append(ghost); }
+      ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
+      const b = binAt(e.clientX, e.clientY);
+      if (b !== over) { over && over.classList.remove('over'); over = b; over && over.classList.add('over'); }
+    });
+    const end = e => {
+      if (ghost) {
+        const b = binAt(e.clientX, e.clientY);
+        ghost.remove(); ghost = null;
+        over && over.classList.remove('over'); over = null;
+        if (b) sortCard(c, b.dataset.bin);
+      }
+      start = null;
+      document.body.classList.remove('dragging');
+    };
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('lostpointercapture', () => { if (ghost) { ghost.remove(); ghost = null; } over && over.classList.remove('over'); over = null; start = null; document.body.classList.remove('dragging'); });
+  }
+
+  function restart() {
+    order = shuffle(CARDS);
+    state = Object.fromEntries(order.map(c => [c.id, { attempts: 0, done: false, firstTry: false }]));
+    buildCards(); updateProgress();
+    announce('Cards shuffled. ' + order.length + ' circuits to sort.');
+  }
+  $('#shuffle').addEventListener('click', restart);
+  buildBins();
+  restart();
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> How to tell series, parallel and combined circuits apart by their current paths, not by how the parts are laid out on the page.</p>
+    <p><strong>Time:</strong> about 3&ndash;5 minutes.</p>
+    <ul>
+      <li>Nine cards, three per type. One card of each type is a layout trick: a series circuit drawn like a ladder, a parallel circuit drawn as a straight line, and a combined circuit with its series part placed last.</li>
+      <li>Every card also has a breadboard view of the same circuit, so students can practice reading physical builds. On the breadboard, the five holes in each numbered row (a&ndash;e, and f&ndash;j) are connected, and the long side columns are the + and &minus; rails.</li>
+      <li>Keyboard: Tab to a card&rsquo;s Sort buttons, or focus the card and press 1 (Series), 2 (Parallel) or 3 (Combined).</li>
+      <li>Wire colors follow the voltage scale used in all of these tools (warm = higher). In parallel circuits, every rung shows the same colors at its top and bottom, a nice extra clue.</li>
+      <li>Suggested tie-in: after sorting, have students build one card from each bin on a breadboard and check it with a meter.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

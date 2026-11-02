@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Electrical Circuits Interactives</title>
+<meta name="description" content="Seven short, standalone interactives and animations for learning series and parallel circuits, Ohm's law, measurement and Kirchhoff's laws.">
+<style>
+  .groups { display: grid; gap: 22px; }
+  .group h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 0 0 10px; }
+  .tiles { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+  .tile { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
+  .tile:hover { border-color: var(--accent); }
+  @media (prefers-reduced-motion: no-preference) { .tile:hover { transform: translateY(-2px); } }
+  .tile .art { background: #fff; border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 1; display: grid; place-items: center; }
+  .tile .art svg { width: 78px; height: 78px; }
+  .tile h3 { margin: 0 0 4px; font-size: 1.08rem; color: var(--accent); }
+  .tile p { margin: 0 0 8px; font-size: .94rem; color: var(--ink-2); }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .how { margin-top: 26px; }
+  .how ul { margin: 0; padding-left: 1.2em; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <h1>Electrical Circuits Interactives</h1>
+      <p class="lede">Seven short tools for learning how circuits work. Use them alongside breadboard builds and circuit simulations, not instead of them. Each tool works on its own and offline.</p>
+    </div>
+  </header>
+
+  <main class="groups">
+    <section class="group" aria-labelledby="g1">
+      <h2 id="g1">Circuit types</h2>
+      <div class="tiles">
+        <a class="tile" href="series-parallel-sorter.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="8" y="14" width="28" height="22" rx="3" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M44 14H72M44 36H72M44 14V36M58 14V36M72 14V36" stroke="#1b2330" stroke-width="3" fill="none"/><rect x="8" y="48" width="64" height="22" rx="4" fill="none" stroke="#7b3fe4" stroke-width="3" stroke-dasharray="6 4"/><path d="M30 59h20" stroke="#7b3fe4" stroke-width="3"/></svg></span>
+          <span><h3>Series vs. Parallel Sorter</h3><p>Sort nine circuit cards into series, parallel or combined by tracing their current paths.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">3&ndash;5 min</span></span></span>
+        </a>
+        <a class="tile" href="remove-a-bulb.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M10 20H70V62H10Z" fill="none" stroke="#d55e00" stroke-width="3"/><circle cx="40" cy="20" r="10" fill="#fff3b0" stroke="#1b2330" stroke-width="3"/><path d="M33 13l14 14M47 13L33 27" stroke="#1b2330" stroke-width="3"/><circle cx="40" cy="62" r="10" fill="#fff" stroke="#b3261e" stroke-width="3" stroke-dasharray="4 3"/></svg></span>
+          <span><h3>Remove a Bulb: Series vs. Parallel</h3><p>Predict, then take a bulb out of each circuit and see which paths keep working.</p><span class="meta"><span class="tag">Animation + interactive</span><span class="tag">about 1 min each</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g2">
+      <h2 id="g2">Modeling and testing circuits</h2>
+      <div class="tiles">
+        <a class="tile" href="breadboard-schematic-mapper.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="6" y="8" width="30" height="64" rx="4" fill="#f4f2eb" stroke="#c9c3b0" stroke-width="2"/><g fill="#3d3d3d"><rect x="12" y="16" width="4" height="4"/><rect x="19" y="16" width="4" height="4"/><rect x="26" y="16" width="4" height="4"/><rect x="12" y="26" width="4" height="4"/><rect x="19" y="26" width="4" height="4"/><rect x="26" y="26" width="4" height="4"/><rect x="12" y="36" width="4" height="4"/><rect x="19" y="36" width="4" height="4"/><rect x="26" y="36" width="4" height="4"/></g><rect x="9" y="24" width="24" height="8" rx="3" fill="rgb(123 63 228 / .25)" stroke="#7b3fe4" stroke-width="2" stroke-dasharray="3 2"/><path d="M36 28H50" stroke="#7b3fe4" stroke-width="2" stroke-dasharray="3 2"/><path d="M50 16V64H74" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M50 28l-5 3 10 4-10 4 5 3" fill="none" stroke="#1b2330" stroke-width="2.5"/></svg></span>
+          <span><h3>Breadboard-to-Schematic Mapper</h3><p>Match every part, wire and row of holes on a breadboard with its symbol and wire on the schematic.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">2&ndash;3 min</span></span></span>
+        </a>
+        <a class="tile" href="multimeter-placement-lab.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><rect x="18" y="6" width="44" height="68" rx="8" fill="#f2b81c"/><rect x="23" y="11" width="34" height="58" rx="5" fill="#2b2f36"/><rect x="27" y="15" width="26" height="14" rx="2" fill="#c9d4c1"/><circle cx="40" cy="44" r="9" fill="#3a4049"/><path d="M40 44l5-6" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="31" cy="62" r="3" fill="#d63b32"/><circle cx="49" cy="62" r="3" fill="#111" stroke="#888"/></svg></span>
+          <span><h3>Multimeter Placement Lab</h3><p>Set up a meter to measure voltage, current and resistance, and see what goes wrong with the wrong setup.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">3&ndash;5 min</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="group" aria-labelledby="g3">
+      <h2 id="g3">Circuit relationships and Kirchhoff&rsquo;s laws</h2>
+      <div class="tiles">
+        <a class="tile" href="ohms-law-explorer.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M12 8V68H74" fill="none" stroke="#1b2330" stroke-width="3"/><path d="M12 68L46 14" stroke="#d55e00" stroke-width="3"/><path d="M12 68L70 40" stroke="#1f66c9" stroke-width="3"/><circle cx="29" cy="41" r="4" fill="#d55e00"/><circle cx="41" cy="54" r="4" fill="#1f66c9"/><circle cx="56" cy="47" r="4" fill="#1f66c9"/></svg></span>
+          <span><h3>Ohm&rsquo;s Law Explorer</h3><p>Turn the knobs on a bench power supply, collect data, and find what the slope of a V&ndash;I graph means.</p><span class="meta"><span class="tag">Interactive</span><span class="tag">about 5 min</span></span></span>
+        </a>
+        <a class="tile" href="current-at-a-junction.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M6 40H30M30 40L54 20H74M30 40L54 60H74" fill="none" stroke="#1b2330" stroke-width="3"/><circle cx="30" cy="40" r="4.5" fill="#1b2330"/><g fill="#ffd21f" stroke="#3a2f00" stroke-width="1.2"><circle cx="10" cy="40" r="3.5"/><circle cx="18" cy="40" r="3.5"/><circle cx="26" cy="40" r="3.5"/><circle cx="44" cy="28" r="3.5"/><circle cx="54" cy="20" r="3.5"/><circle cx="66" cy="20" r="3.5"/><circle cx="48" cy="55" r="3.5"/><circle cx="70" cy="60" r="3.5"/></g></svg></span>
+          <span><h3>Current at a Junction</h3><p>Watch current split at a junction and rejoin. The current in always equals the current out.</p><span class="meta"><span class="tag">Animation</span><span class="tag">about 40 s</span></span></span>
+        </a>
+        <a class="tile" href="walk-the-voltage-loop.html">
+          <span class="art" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M8 70V8M8 70H74" fill="none" stroke="#1b2330" stroke-width="2.5"/><path d="M10 66L20 66L26 16L36 16L42 30L48 30L54 46L60 46L66 66L72 66" fill="none" stroke="#7b3fe4" stroke-width="3.5" stroke-linejoin="round"/><circle cx="51" cy="38" r="5" fill="#7b3fe4" stroke="#fff" stroke-width="2"/></svg></span>
+          <span><h3>Walk the Voltage Loop</h3><p>Walk a marker around a loop: up across the battery, down across each resistor, and back to where you started.</p><span class="meta"><span class="tag">Animation + interactive</span><span class="tag">2&ndash;3 min</span></span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="panel how" aria-labelledby="g4">
+      <h2 id="g4">How these tools work</h2>
+      <ul>
+        <li>Moving dots show conventional current (+ to &minus;). Every dot is the same amount of charge and moves at the same speed, so closer dots mean more current.</li>
+        <li>Wire colors show voltage: warm colors for higher voltage, cool colors for lower. Values are always labeled too.</li>
+        <li>Most tools ask for a prediction before showing the answer.</li>
+        <li>Everything works by keyboard, has captions or text descriptions, and respects the &ldquo;reduce motion&rdquo; setting.</li>
+        <li>No accounts, no tracking, and nothing leaves the page. Each tool is a single HTML file.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="app-foot"><span>Electrical Circuits Interactives</span><span>Works offline. No data leaves this page.</span></footer>
+</div>
+</body>
+</html>

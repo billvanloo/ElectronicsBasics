@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Current at a Junction</title>
+<meta name="description" content="A short animation showing current splitting at a junction and recombining: the current going in equals the current coming out.">
+<style>
+  .player { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .scene-ind { font-weight: 700; font-size: .95rem; margin-left: auto; }
+  progress.timeline { width: 100%; height: 8px; margin-top: 10px; accent-color: var(--accent); }
+  .counter rect { fill: #ffffff; stroke: #1b2330; stroke-width: 1.5; }
+  .counter text.t { font: 700 12px var(--font); fill: #4b5667; }
+  .counter text.v { font: 800 17px var(--mono); fill: #1b2330; }
+  .counter text.r { font: 600 11px var(--font); fill: #4b5667; }
+  .counter.dim { opacity: .25; }
+  .flow-dim { opacity: .35; }
+  .equation { display: grid; gap: 8px; padding: 4px 0; }
+  .equation .eq { font: 800 1.35rem var(--mono); letter-spacing: -.02em; text-align: center; white-space: nowrap; padding: 10px 0; border-block: 1px solid var(--line); }
+  .equation .eq .op { color: var(--ink-2); padding: 0 .25em; }
+  .equation .law { font-weight: 600; }
+  .eq-wait { color: var(--ink-2); }
+  .layout > * { min-width: 0; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+  .layout > .panel + .panel { margin-top: 0; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Current at a Junction</h1>
+      <p class="lede">Watch current split at junction J1 and rejoin at junction J2. The counters show how much current flows in each part of the circuit. About 40 seconds.</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel" aria-labelledby="h-anim">
+      <h2 id="h-anim" class="sr-only">Animation</h2>
+      <div class="legend" style="margin-bottom:10px">
+        <span class="item"><svg viewBox="0 0 34 16" aria-hidden="true"><path d="M2 8H32" stroke="#8c94a0" stroke-width="3"/><circle cx="10" cy="8" r="4" class="dot"/><circle cx="24" cy="8" r="4" class="dot"/></svg>Each dot = the same amount of charge. All dots move at the same speed. Closer dots = more current.</span>
+      </div>
+      <div class="stage" id="stage"></div>
+      <progress class="timeline" id="timeline" max="40" value="0" aria-label="Animation progress"></progress>
+      <div class="player" role="group" aria-label="Animation controls">
+        <button class="btn btn-primary" id="play" type="button">Play</button>
+        <button class="btn" id="prev" type="button" aria-label="Previous scene">&#9664; Scene</button>
+        <button class="btn" id="next" type="button" aria-label="Next scene">Scene &#9654;</button>
+        <button class="btn" id="replay" type="button">Replay</button>
+        <span class="scene-ind" id="sceneInd" aria-live="polite">Scene 1 of 5</span>
+      </div>
+      <div style="margin-top:12px" id="captions"></div>
+    </section>
+
+    <aside class="stack">
+      <section class="panel" aria-labelledby="h-pred">
+        <h2 id="h-pred">Predict</h2>
+        <p class="small muted">The animation pauses at J1. Before the current splits, how will it divide?</p>
+        <div id="predict"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-eq">
+        <h2 id="h-eq">Check the junction</h2>
+        <div class="equation" id="equation" aria-live="polite"><span class="eq-wait">Revealed in scene 5.</span></div>
+      </section>
+      <section class="panel" aria-labelledby="h-try">
+        <h2 id="h-try">Try another split</h2>
+        <p class="small muted" id="splitText">R2 is 600 &Omega;. Change it to 300 &Omega; and replay.</p>
+        <button class="btn" id="split" type="button">Change R2 to 300 &Omega;</button>
+      </section>
+    </aside>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, Captioner, Predict, motion, about, announce, sig } = UI;
+  const S = Schem;
+  const VB = 6, R1 = 300;
+  let R2 = 600;
+  let res;
+  const solve = () => {
+    res = Engine.solve([{ id: 'BAT', type: 'vsource', pos: 'p', neg: 'g', V: VB },
+      { id: 'R1', type: 'resistor', a: 'j1', b: 'j2', R: R1 }, { id: 'R2', type: 'resistor', a: 'j1', b: 'j2', R: R2 },
+      { id: 'W1', type: 'wire', a: 'p', b: 'j1' }, { id: 'W2', type: 'wire', a: 'j2', b: 'g' }]);
+  };
+  solve();
+  const mA = id => Math.round(res.I[id] * 1000);
+
+  /* ---------- drawing ---------- */
+  const svg = S.svg(660, 372, { role: 'img' });
+  $('#stage').append(svg);
+  const VMAX = VB;
+  let parts = {};
+  function drawCircuit() {
+    svg.replaceChildren();
+    const c = n => S.vColor(res.V[n], VMAX);
+    const g = {};
+    g.entry = S.el('g', {}, svg);
+    S.wire(g.entry, [[220, 330], [60, 330], [60, 170], [250, 170]], c('p'));
+    g.b1 = S.el('g', {}, svg);
+    S.wire(g.b1, [[250, 170], [250, 90], [330, 90]], c('j1'));
+    S.resistor(g.b1, 330, 90, 450, 90, { ca: c('j1'), cb: c('j2') });
+    S.wire(g.b1, [[450, 90], [530, 90], [530, 170]], c('j2'));
+    S.label(g.b1, 390, 120, 'R1 = 300 Ω');
+    g.b2 = S.el('g', {}, svg);
+    S.wire(g.b2, [[250, 170], [250, 250], [330, 250]], c('j1'));
+    S.resistor(g.b2, 330, 250, 450, 250, { ca: c('j1'), cb: c('j2') });
+    S.wire(g.b2, [[450, 250], [530, 250], [530, 170]], c('j2'));
+    S.label(g.b2, 390, 280, 'R2 = ' + R2 + ' Ω');
+    g.exit = S.el('g', {}, svg);
+    S.wire(g.exit, [[530, 170], [610, 170], [610, 330], [440, 330]], c('j2'));
+    S.battery(g.exit, 440, 330, 220, 330, { cneg: c('g'), cpos: c('p'), cells: 3, markSide: 'left' });
+    S.label(svg, 330, 306, '6 V battery', { cls: 'lbl-sm' });
+    S.junction(svg, 250, 170, c('j1')); S.junction(svg, 530, 170, c('j2'));
+    S.label(svg, 236, 162, 'J1', { anchor: 'end' });
+    S.label(svg, 544, 162, 'J2', { anchor: 'start' });
+    // direction arrows (always visible, for no-motion viewing)
+    S.arrowOnPath(svg, 120, 170, 200, 170); S.arrowOnPath(svg, 470, 90, 530, 90); S.arrowOnPath(svg, 470, 250, 530, 250); S.arrowOnPath(svg, 610, 240, 610, 300);
+    S.arrowOnPath(svg, 250, 140, 250, 110); S.arrowOnPath(svg, 250, 200, 250, 230);
+    const dots = S.el('g', {}, svg);
+    // counters
+    const counter = (x, y, title, id) => {
+      const cg = S.el('g', { class: 'counter dim' }, svg);
+      S.el('rect', { x, y, width: 128, height: 52, rx: 8 }, cg);
+      S.el('text', { x: x + 10, y: y + 16, class: 't', text: title }, cg);
+      const v = S.el('text', { x: x + 10, y: y + 36, class: 'v', text: '— mA' }, cg);
+      const r = S.el('text', { x: x + 10, y: y + 48, class: 'r', text: '' }, cg);
+      return { g: cg, v, r, id };
+    };
+    g.cIn = counter(78, 102, 'Into J1', 'BAT');
+    g.cR1 = counter(326, 12, 'Through R1', 'R1');
+    g.cR2 = counter(326, 180, 'Through R2', 'R2');
+    g.cOut = counter(520, 14, 'Out of J2', 'BAT');
+    parts = g;
+    // dots
+    flow.clear(); flow.layer = dots;
+    const exitPts = [[530, 170], [610, 170], [610, 330], [440, 330], [220, 330]];
+    flow.paths = [];
+    g.fEntry = flow.add('entry', [[220, 330], [60, 330], [60, 170], [250, 170]], () => res.I.BAT);
+    g.fB1 = flow.add('b1', [[250, 170], [250, 90], [530, 90], [530, 170]], () => res.I.R1);
+    g.fB2 = flow.add('b2', [[250, 170], [250, 250], [530, 250], [530, 170]], () => res.I.R2);
+    g.fExit = flow.add('exit', exitPts, () => res.I.BAT);
+  }
+  const flow = new DotFlow(S.el('g'), { speed: 60, refCurrent: 0.01, refSpacing: 60, minSpacing: 12 });
+  drawCircuit();
+  const rate = id => Math.round(res.I[id] * 100);   // dots per second: 1 per 10 mA
+
+  /* ---------- scenes ---------- */
+  const SCENES = [
+    { t: 0, caption: () => `${mA('BAT')} mA flows from the battery toward junction J1.` },
+    { t: 8, caption: () => 'At J1 the wire splits into two branches. Where will the current go?' },
+    { t: 14, caption: () => `The current splits: ${mA('R1')} mA through R1 and ${mA('R2')} mA through R2.` + (R1 < R2 ? ' The lower-resistance branch carries more current.' : ' The branches have equal resistance, so they carry equal current.') },
+    { t: 26, caption: () => `The branches rejoin at J2: ${mA('BAT')} mA leaves J2 and returns to the battery.` },
+    { t: 34, caption: () => `Current in equals current out at every junction: ${mA('BAT')} mA = ${mA('R1')} mA + ${mA('R2')} mA.` }
+  ];
+  const END = 40;
+  let t = 0, playing = false, scene = -1, waitedAtJ1 = false;
+  const cap = new Captioner($('#captions'));
+
+  function setCounter(c, on) {
+    c.g.classList.toggle('dim', !on);
+    c.v.textContent = on ? mA(c.id) + ' mA' : '— mA';
+    c.r.textContent = on ? rate(c.id) + (rate(c.id) === 1 ? ' dot' : ' dots') + ' per second' : '';
+  }
+  function applyScene(k) {
+    scene = k;
+    const g = parts;
+    const show = (p, vis, moving) => { p.g.style.display = vis ? '' : 'none'; p.paused = !moving; };
+    // which parts are in focus
+    g.b1.classList.toggle('flow-dim', k < 2); g.b2.classList.toggle('flow-dim', k < 2); g.exit.classList.toggle('flow-dim', k < 3);
+    show(g.fEntry, true, k !== 1);
+    show(g.fB1, k >= 2, true); show(g.fB2, k >= 2, true);
+    show(g.fExit, k >= 3, true);
+    setCounter(g.cIn, true);
+    setCounter(g.cR1, k >= 2); setCounter(g.cR2, k >= 2);
+    setCounter(g.cOut, k >= 3);
+    $('#sceneInd').textContent = `Scene ${k + 1} of 5`;
+    cap.set(SCENES[k].caption());
+    if (k >= 2 && predict.locked != null && !predict.shown) {
+      predict.shown = true;
+      predict.reveal(R1 < R2 ? 1 : 0, `R1 has less resistance, so more current takes that branch (${mA('R1')} mA vs ${mA('R2')} mA).`);
+    }
+    renderEquation(k >= 4);
+  }
+  function renderEquation(on) {
+    const box = $('#equation');
+    if (!on) { box.replaceChildren(h('span', { class: 'eq-wait' }, 'Revealed in scene 5.')); return; }
+    box.replaceChildren(
+      h('div', { class: 'small muted' }, 'Current into J1 = current through the branches = current out of J2'),
+      h('div', { class: 'eq', 'aria-label': `${mA('BAT')} milliamps equals ${mA('R1')} milliamps plus ${mA('R2')} milliamps` },
+        `${mA('BAT')} mA`, h('span', { class: 'op' }, '='), `${mA('R1')} mA`, h('span', { class: 'op' }, '+'), `${mA('R2')} mA`),
+      h('div', { class: 'law' }, 'Kirchhoff’s current law: the total current entering a junction equals the total current leaving it.'),
+      h('div', { class: 'small muted' }, 'Charge is not created or used up at a junction. It only divides and recombines.'));
+  }
+  const sceneAt = time => { let k = 0; SCENES.forEach((s, i) => { if (time >= s.t) k = i; }); return k; };
+
+  const predict = new Predict($('#predict'), {
+    question: 'How will the current divide at J1?',
+    choices: ['Evenly between R1 and R2', 'More through R1 (300 Ω)', 'More through R2 (600 Ω)'],
+    onLock: () => { if (scene === 1 && !playing && motion.on) setPlaying(true); }
+  });
+
+  const playBtn = $('#play');
+  function setPlaying(v) {
+    playing = v && t < END;
+    playBtn.textContent = playing ? 'Pause' : (t >= END ? 'Play again' : 'Play');
+    playBtn.setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation');
+    flow.setMotion(motion.on && (playing || t >= END));
+  }
+  playBtn.addEventListener('click', () => {
+    if (t >= END) { restart(); setPlaying(true); return; }
+    setPlaying(!playing);
+  });
+  $('#replay').addEventListener('click', () => { restart(); setPlaying(true); });
+  $('#next').addEventListener('click', () => { const k = Math.min(4, scene + 1); t = SCENES[k].t; setPlaying(false); applyScene(k); syncBar(); });
+  $('#prev').addEventListener('click', () => { const k = Math.max(0, scene - 1); t = SCENES[k].t; setPlaying(false); applyScene(k); syncBar(); });
+  function restart() { t = 0; waitedAtJ1 = false; predict.shown = false; applyScene(0); syncBar(); }
+  const syncBar = () => { $('#timeline').value = t; };
+
+  flow.onTick = dt => {
+    if (!playing) return;
+    t = Math.min(END, t + dt);
+    const k = sceneAt(t);
+    if (k !== scene) applyScene(k);
+    syncBar();
+    if (t >= END) { setPlaying(false); flow.setMotion(motion.on); }
+  };
+  flow.start();
+  motion.onChange(on => { flow.setMotion(on && (playing || t >= END)); if (!on && playing) setPlaying(false); });
+
+  $('#split').addEventListener('click', () => {
+    R2 = R2 === 600 ? 300 : 600;
+    solve(); drawCircuit();
+    $('#split').textContent = R2 === 600 ? 'Change R2 to 300 Ω' : 'Change R2 back to 600 Ω';
+    $('#splitText').textContent = R2 === 600 ? 'R2 is 600 Ω. Change it to 300 Ω and replay.' : `R2 is now 300 Ω, the same as R1. Each branch carries ${mA('R1')} mA, for ${mA('BAT')} mA in total.`;
+    predict.reset(); predict.shown = false;
+    restart(); setPlaying(motion.on);
+    announce(`R2 changed to ${R2} ohms. Animation restarted.`);
+  });
+
+  applyScene(0);
+  setPlaying(motion.on);
+  if (!motion.on) cap.set(SCENES[0].caption() + ' Motion is off: use the Scene buttons to step through.');
+
+  svg.setAttribute('aria-label', 'Circuit: a 6 volt battery feeds junction J1. From J1, one branch goes through R1 (300 ohms) and another through R2 (' + R2 + ' ohms). The branches rejoin at junction J2, and the current returns to the battery. Counters show the current into J1, through each branch, and out of J2.');
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> Current is conserved at a junction. It divides among the branches and recombines (Kirchhoff&rsquo;s current law).</p>
+    <p><strong>Time:</strong> about 40 seconds, plus discussion.</p>
+    <ul>
+      <li>Every dot moves at the same speed, and each dot is the same amount of charge. More current shows as dots closer together, never as faster dots. At this scale, 10 mA = 1 dot per second.</li>
+      <li>The numbers: 6 V across 300 &Omega; is 20 mA, and 6 V across 600 &Omega; is 10 mA, for 30 mA in total. With R2 at 300 &Omega;, the total is 20 + 20 = 40 mA.</li>
+      <li>The simplified scenes show the current &ldquo;arriving&rdquo; at J1 first so that students can focus on one place at a time. In a real circuit, current flows everywhere in the loop at the same moment the switch closes. That is worth pointing out.</li>
+      <li>Suggested tie-in: on a breadboard, measure the current before the split, in each branch, and after the rejoin. Check that the first and last readings match the sum of the branches.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Breadboard-to-Schematic Mapper</title>
+<meta name="description" content="Match each part and connection on a breadboard with its symbol and wire on a schematic of the same circuit.">
+<style>
+  .layout > * { min-width: 0; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .layout > .panel + .panel { margin-top: 0; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .sticky-col { position: sticky; top: 12px; }
+  @media (max-width: 900px) { .sticky-col { position: static; } }
+  .info { min-height: 5.2em; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+  .info h3 { margin: 0 0 4px; font-size: 1.02rem; }
+  .info p { margin: 0; font-size: .95rem; }
+  .pin-note { font-size: .82rem; color: var(--ink-2); margin-top: 6px; }
+  .hl-overlay { fill: rgb(123 63 228 / 0); stroke: none; }
+  .hl-overlay.is-hl { fill: rgb(123 63 228 / .2); stroke: #7b3fe4; stroke-width: 2.5; stroke-dasharray: 6 4; }
+  .focusable:focus-visible .hl-overlay, .hl-overlay.focusable:focus-visible { stroke: #7b3fe4; stroke-width: 3; }
+  .sc-wire-hl { fill: none; stroke: #7b3fe4; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+  .sc-wire-hl.is-hl { opacity: .32; }
+  .callout rect { fill: #5a2bb0; }
+  .callout text { font: 700 12px var(--font); fill: #fff; }
+  .check { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface-2); }
+  .check .prompt { font-weight: 700; font-size: 1.02rem; margin: 6px 0 8px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Breadboard-to-Schematic Mapper</h1>
+      <p class="lede">The breadboard and the schematic show the same circuit. Point at, tap or tab to any part, wire or row of holes to see its match on the other side.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel toolbar">
+      <div class="row">
+        <span class="small" style="font-weight:700">Breadboard layout:</span>
+        <div class="seg" role="group" aria-label="Breadboard layout">
+          <button type="button" data-layout="A" aria-pressed="true">Layout A</button>
+          <button type="button" data-layout="B" aria-pressed="false">Layout B</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-small" id="swBtn" type="button">Turn switch off</button>
+        <button class="btn btn-small" id="checkBtn" type="button" aria-pressed="false">Check yourself</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <section class="panel" aria-labelledby="h-bb">
+        <h2 id="h-bb">Breadboard</h2>
+        <div class="stage" id="bbStage"></div>
+        <p class="small muted" style="margin:8px 0 0">The five holes in each numbered row (a&ndash;e, and f&ndash;j) are connected inside the board. The long + and &minus; columns are the power rails.</p>
+      </section>
+      <div class="stack sticky-col">
+        <section class="panel" aria-labelledby="h-sc">
+          <h2 id="h-sc">Schematic</h2>
+          <div class="stage" id="scStage"></div>
+        </section>
+        <section class="panel" aria-labelledby="h-info">
+          <h2 id="h-info" class="sr-only">Selected item</h2>
+          <div class="info" id="info" aria-live="polite"><h3>Explore</h3><p>Point at or tab to anything on either side. Use the arrow keys to move along the circuit. Press Enter to pin a highlight.</p></div>
+          <div id="checkBox" style="margin-top:12px" hidden></div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, $$, feedback, about, announce, motion } = UI;
+  const S = Schem;
+
+  /* ---------- the circuit (same in both layouts) ---------- */
+  const NODES = {
+    'N+': { name: 'positive connection', sc: 'from the battery’s + terminal to SW1' },
+    'Nsw': { name: 'switch-to-resistor connection', sc: 'between SW1 and R1' },
+    'Nled': { name: 'resistor-to-LED connection', sc: 'between R1 and LED1' },
+    'N-': { name: 'negative (return) connection', sc: 'from LED1 back to the battery’s − terminal' }
+  };
+  const PARTS = {
+    BAT: { name: 'Battery (9 V)', short: 'battery', sc: 'the battery symbol on the left: long plate +, short plate −' },
+    SW1: { name: 'SW1, slide switch', short: 'SW1', sc: 'between the battery’s + wire and R1' },
+    R1: { name: 'R1, 470 Ω resistor', short: 'R1', sc: 'between SW1 and LED1', extra: 'Color bands: yellow, violet, brown, gold (47 × 10 = 470 Ω). A resistor works the same in either direction.' },
+    LED1: { name: 'LED1, red LED', short: 'LED1', sc: 'between R1 and the − wire, triangle pointing toward −', extra: 'The long leg (marked +) is the anode and matches the flat side of the triangle. The flat edge of the LED body is the cathode (−), which matches the bar.' }
+  };
+  const ROW = (r, s) => ({ r, s });
+  const LAYOUTS = {
+    A: {
+      bat: 'N+',
+      wires: { W1: { from: [3, 'L+'], to: [3, 'a'], color: '#d63b32', node: 'N+' }, W2: { from: [4, 'e'], to: [4, 'f'], color: '#2e9d3a', node: 'Nsw' },
+               W3: { from: [12, 'j'], to: [12, 'R-'], color: '#222', node: 'N-' }, W4: { from: [19, 'R-'], to: [19, 'L-'], color: '#222', node: 'N-' } },
+      sw: [[3, 'c'], [4, 'c'], [5, 'c']],
+      r1: [[4, 'h'], [9, 'h']],
+      led: [[9, 'g'], [12, 'g']],
+      strips: { 'N+': [ROW(3, 'L')], 'Nsw': [ROW(4, 'L'), ROW(4, 'R')], 'Nled': [ROW(9, 'R')], 'N-': [ROW(12, 'R')] },
+      rails: { 'N+': ['L+'], 'N-': ['R-', 'L-'] },
+      unused: ROW(5, 'L')
+    },
+    B: {
+      wires: { W1: { from: [16, 'L+'], to: [16, 'a'], color: '#d63b32', node: 'N+' }, W2: { from: [17, 'e'], to: [22, 'e'], color: '#2e9d3a', node: 'Nsw' },
+               W3: { from: [26, 'j'], to: [26, 'R-'], color: '#222', node: 'N-' }, W4: { from: [29, 'R-'], to: [29, 'L-'], color: '#222', node: 'N-' } },
+      sw: [[16, 'c'], [17, 'c'], [18, 'c']],
+      r1: [[22, 'h'], [22, 'c']],
+      led: [[22, 'i'], [26, 'i']],
+      strips: { 'N+': [ROW(16, 'L')], 'Nsw': [ROW(17, 'L'), ROW(22, 'L')], 'Nled': [ROW(22, 'R')], 'N-': [ROW(26, 'R')] },
+      rails: { 'N+': ['L+'], 'N-': ['R-', 'L-'] },
+      unused: ROW(18, 'L')
+    }
+  };
+  let layout = 'A', swOn = true, pinned = null, current = null, checkMode = false;
+  const side = s => (s === 'L' ? 'a–e' : 'f–j');
+  const holeName = ([r, c]) => c.length === 2 ? `the ${c[1] === '+' ? '+' : '−'} rail (${c[0] === 'L' ? 'left' : 'right'} side)` : `row ${r}, hole ${c}`;
+
+  /* ---------- registry of mappable items ---------- */
+  let reg = {};          // id -> { kind, target, bb:[els], sc:[els], label }
+  const add = (id, o) => { reg[id] = Object.assign(reg[id] || { bb: [], sc: [] }, o); return reg[id]; };
+  const addEl = (id, where, el) => { add(id, {}); reg[id][where].push(el); };
+
+  /* ---------- breadboard ---------- */
+  let bbOrder = [], scOrder = [];
+  function drawBB() {
+    const L = LAYOUTS[layout];
+    const svg = S.svg(450, 34 + 29 * 18 + 30, { role: 'group' });
+    svg.setAttribute('aria-label', 'Breadboard view. Use the arrow keys to move between parts and connections.');
+    const board = new BB.Breadboard(svg, { rows: 30, x: 100, y: 2 });
+    const H = (r, c) => board.hole(r, c);
+    const overlays = S.el('g', {}, svg);
+    const parts = S.el('g', {}, svg);
+    bbOrder = [];
+    // battery
+    const batG = S.el('g', {}, parts);
+    const bat = BB.battery9v(batG, 10, 70);
+    BB.lead(batG, bat.pos, H(1, 'L+'), '#d63b32', { bend: 40, by: 0, bx: -50, down: false });
+    BB.lead(batG, bat.neg, H(2, 'L-'), '#222', { bend: 24, by: 0, bx: -30, down: false });
+    item(batG, 'BAT', 'bb', 'Battery, 9 volts. Plus lead to the + rail, minus lead to the − rail.');
+    // rails
+    const railRect = col => { const [x] = H(1, col); const y0 = H(1, col)[1] - 10, y1 = H(30, col)[1] + 10; return S.el('rect', { x: x - 8, y: y0, width: 16, height: y1 - y0, rx: 6, class: 'hl-overlay' }, overlays); };
+    const strip = (r, s) => { const a = H(r, s === 'L' ? 'a' : 'f'), e = H(r, s === 'L' ? 'e' : 'j'); return S.el('rect', { x: a[0] - 9, y: a[1] - 9, width: e[0] - a[0] + 18, height: 18, rx: 5, class: 'hl-overlay' }, overlays); };
+    // wires
+    const wireEls = {};
+    for (const [id, w] of Object.entries(L.wires)) {
+      const g = BB.wire(parts, [H(...w.from), H(...w.to)], w.color);
+      wireEls[id] = g;
+    }
+    // switch, resistor, LED
+    const swG = BB.slideSwitch(parts, L.sw.map(p => H(...p)), swOn);
+    const rG = BB.resistor(parts, H(...L.r1[0]), H(...L.r1[1]), 470);
+    const ledG = BB.led(parts, H(...L.led[0]), H(...L.led[1]), { lit: swOn, plusDx: 14 });
+
+    // hit areas for strips + rails (focusable)
+    const stripItems = {};
+    for (const [node, list] of Object.entries(L.strips)) list.forEach(({ r, s }) => {
+      const id = `s:${r}${s}`;
+      const rect = strip(r, s);
+      add(id, { kind: 'strip', target: node, label: `Row ${r}, holes ${side(s)}`, row: r, side: s });
+      reg[id].bb.push(rect);
+      stripItems[id] = rect;
+    });
+    for (const [node, list] of Object.entries(L.rails)) list.forEach(col => {
+      const id = 'rail:' + col;
+      const rect = railRect(col);
+      add(id, { kind: 'rail', target: node, label: `${col[1] === '+' ? 'Plus' : 'Minus'} rail, ${col[0] === 'L' ? 'left' : 'right'} side` });
+      reg[id].bb.push(rect);
+    });
+    // order along the circuit (roving focus)
+    const seq = layout === 'A'
+      ? ['BAT', 'rail:L+', 'W1', 's:3L', 'SW1', 's:4L', 'W2', 's:4R', 'R1', 's:9R', 'LED1', 's:12R', 'W3', 'rail:R-', 'W4', 'rail:L-']
+      : ['BAT', 'rail:L+', 'W1', 's:16L', 'SW1', 's:17L', 'W2', 's:22L', 'R1', 's:22R', 'LED1', 's:26R', 'W3', 'rail:R-', 'W4', 'rail:L-'];
+    item(swG, 'SW1', 'bb', `SW1, slide switch, ${swOn ? 'on' : 'off'}. Pins in rows ${L.sw.map(p => p[0]).join(', ')}, hole ${L.sw[0][1]}.`);
+    item(rG, 'R1', 'bb', `R1, 470 ohm resistor, legs in ${holeName(L.r1[0])} and ${holeName(L.r1[1])}.`);
+    item(ledG, 'LED1', 'bb', `LED1, red LED, ${swOn ? 'lit' : 'off'}. Long leg (plus) in ${holeName(L.led[0])}, short leg in ${holeName(L.led[1])}.`);
+    for (const [id, g] of Object.entries(wireEls)) {
+      const w = L.wires[id];
+      add(id, { kind: 'wire', target: w.node, label: `Jumper wire from ${holeName(w.from)} to ${holeName(w.to)}` });
+      item(g, id, 'bb', `Jumper wire from ${holeName(w.from)} to ${holeName(w.to)}.`);
+    }
+    for (const id of Object.keys(reg)) if (reg[id].kind === 'strip' || reg[id].kind === 'rail') {
+      const el = reg[id].bb[0];
+      UI.makeFocusable(el, { label: reg[id].label, role: 'button', onActivate: () => pin(id), onFocus: () => setCur(id), onBlur: () => clearCur(id) });
+      el.setAttribute('tabindex', '-1');
+    }
+    bbOrder = seq;
+    $('#bbStage').replaceChildren(svg);
+    // focus rings now that elements are in the document
+    for (const id of ['BAT', 'SW1', 'R1', 'LED1', 'W1', 'W2', 'W3', 'W4']) { const g = reg[id].bb[0]; if (g) S.addFocusRing(g, 6); }
+    roving(bbOrder, 'bb');
+  }
+  function item(g, id, where, label) {
+    add(id, { kind: reg[id]?.kind || 'part', target: reg[id]?.target || id });
+    reg[id][where].push(g);
+    UI.makeFocusable(g, { label, role: 'button', onActivate: () => pin(id), onFocus: () => setCur(id), onBlur: () => clearCur(id) });
+    g.setAttribute('tabindex', '-1');
+  }
+
+  /* ---------- schematic ---------- */
+  function drawSC() {
+    const svg = S.svg(400, 290, { role: 'group' });
+    svg.setAttribute('aria-label', 'Schematic view. Use the arrow keys to move between symbols and wires.');
+    const r = Engine.solve([{ id: 'B', type: 'vsource', pos: 'N+', neg: 'N-', V: 9 }, { id: 'SW1', type: 'switch', a: 'N+', b: 'Nsw', closed: swOn },
+      { id: 'R1', type: 'resistor', a: 'Nsw', b: 'Nled', R: 470 }, { id: 'LED1', type: 'led', a: 'Nled', b: 'N-' }]);
+    const col = n => S.vColor(r.V[n] ?? 0, 9);
+    const hlLayer = S.el('g', {}, svg);
+    const wireNode = (node, pts) => {
+      const g = S.el('g', {}, svg);
+      const hl = S.el('path', { class: 'sc-wire-hl', d: pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ') }, hlLayer);
+      S.wire(g, pts, col(node));
+      // wide invisible hit path
+      S.el('path', { d: pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' '), stroke: 'transparent', 'stroke-width': 18, fill: 'none' }, g);
+      add(node, { kind: 'node', target: node, label: 'Wire ' + NODES[node].sc });
+      reg[node].sc.push(g); reg[node].scHl = (reg[node].scHl || []).concat(hl);
+      return g;
+    };
+    const gP = wireNode('N+', [[60, 90], [60, 40], [100, 40]]);
+    const gSW = S.el('g', {}, svg); S.sw(gSW, 100, 40, 180, 40, { closed: swOn, ca: col('N+'), cb: col('Nsw') }); S.label(gSW, 140, 72, 'SW1');
+    const gS = wireNode('Nsw', [[180, 40], [220, 40]]);
+    const gR = S.el('g', {}, svg); S.resistor(gR, 220, 40, 320, 40, { ca: col('Nsw'), cb: col('Nled') }); S.label(gR, 270, 72, 'R1'); S.label(gR, 270, 88, '470 Ω', { cls: 'lbl-val' });
+    const gL = wireNode('Nled', [[320, 40], [350, 40], [350, 100]]);
+    const gLED = S.el('g', {}, svg); S.led(gLED, 350, 100, 350, 180, { lit: swOn, ca: col('Nled'), cb: col('N-') }); S.label(gLED, 316, 146, 'LED1', { anchor: 'end' });
+    const gN = wireNode('N-', [[350, 180], [350, 250], [60, 250], [60, 210]]);
+    const gB = S.el('g', {}, svg); S.battery(gB, 60, 210, 60, 90, { cneg: col('N-'), cpos: col('N+'), markSide: 'left' }); S.label(gB, 92, 156, '9 V', { anchor: 'start' });
+    $('#scStage').replaceChildren(svg);
+    const sym = (g, id, label) => { add(id, {}); reg[id].sc.push(g); S.addFocusRing(g, 6); UI.makeFocusable(g, { label, role: 'button', onActivate: () => pin(id), onFocus: () => setCur(id), onBlur: () => clearCur(id) }); g.setAttribute('tabindex', '-1'); };
+    sym(gB, 'BAT', 'Battery symbol, 9 volts');
+    sym(gSW, 'SW1', `Switch SW1, ${swOn ? 'closed' : 'open'}`);
+    sym(gR, 'R1', 'Resistor R1, 470 ohms');
+    sym(gLED, 'LED1', `LED1 ${swOn ? 'lit' : 'off'}`);
+    for (const n of Object.keys(NODES)) { const g = reg[n].sc[0]; S.addFocusRing(g, 4); UI.makeFocusable(g, { label: 'Wire ' + NODES[n].sc, role: 'button', onActivate: () => pin(n), onFocus: () => setCur(n), onBlur: () => clearCur(n) }); g.setAttribute('tabindex', '-1'); }
+    scOrder = ['BAT', 'N+', 'SW1', 'Nsw', 'R1', 'Nled', 'LED1', 'N-'];
+    roving(scOrder, 'sc');
+  }
+
+  /* ---------- roving tabindex + arrow keys ---------- */
+  function roving(order, where) {
+    const els = order.map(id => reg[id][where][0]);
+    els.forEach((el, i) => {
+      el.setAttribute('tabindex', i === 0 ? '0' : '-1');
+      el.addEventListener('keydown', e => {
+        const d = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        const j = (i + d + els.length) % els.length;
+        el.setAttribute('tabindex', '-1'); els[j].setAttribute('tabindex', '0'); els[j].focus();
+      });
+    });
+  }
+
+  /* ---------- highlighting + info ---------- */
+  function targetOf(id) { const it = reg[id]; return it.kind === 'part' ? id : it.target; }
+  function applyHL(id) {
+    $$('.is-hl').forEach(e => e.classList.remove('is-hl'));
+    $$('.callout').forEach(e => e.remove());
+    if (!id) return;
+    const t = targetOf(id), it = reg[id];
+    const mark = el => el && el.classList.add('is-hl');
+    if (reg[t].kind === 'node' || it.kind !== 'part') {
+      // a connection: every strip, rail and jumper in that node, plus the schematic wire
+      for (const [k, v] of Object.entries(reg)) if (v.target === t && v.kind !== 'part') { v.bb.forEach(mark); }
+      (reg[t].scHl || []).forEach(mark);
+      reg[t].sc.forEach(mark);
+      if (it.kind === 'wire') it.bb.forEach(mark);
+    } else {
+      it.bb.forEach(mark); it.sc.forEach(mark);
+      callout(it.bb[0], PARTS[t].short); callout(it.sc[0], PARTS[t].short);
+    }
+  }
+  function callout(g, text) {
+    if (!g || !g.ownerSVGElement) return;
+    const b = g.getBBox(), svg = g.ownerSVGElement;
+    const w = 12 + text.length * 7.5, x = Math.min(b.x + b.width / 2 - w / 2, svg.viewBox.baseVal.width - w - 2), y = Math.max(2, b.y - 26);
+    const c = S.el('g', { class: 'callout', 'aria-hidden': 'true' }, svg);
+    S.el('rect', { x, y, width: w, height: 20, rx: 5 }, c);
+    S.el('text', { x: x + w / 2, y: y + 14, 'text-anchor': 'middle', text }, c);
+  }
+  function describe(id) {
+    const t = targetOf(id), it = reg[id], L = LAYOUTS[layout];
+    if (reg[t].kind === 'node' || it.kind !== 'part') {
+      const strips = (L.strips[t] || []).map(s => `row ${s.r} (${side(s.s)})`);
+      const rails = (L.rails[t] || []).map(c => `the ${c[1]} rail on the ${c[0] === 'L' ? 'left' : 'right'}`);
+      const wires = Object.entries(L.wires).filter(([, w]) => w.node === t).map(([k]) => 'jumper ' + k);
+      const where = [...strips, ...rails, ...wires];
+      const lead = it.kind === 'strip' ? `${it.label}. ` : it.kind === 'rail' ? `${it.label}. ` : it.kind === 'wire' ? `${it.label}. ` : '';
+      return { title: 'Connection: ' + NODES[t].name, text: `${lead}On the breadboard this one connection includes ${where.join(', ')}. On the schematic it is the wire ${NODES[t].sc}. Everything highlighted is at the same voltage.` };
+    }
+    const P = PARTS[t];
+    let bbWhere = '';
+    if (t === 'BAT') bbWhere = 'off the board, with its + lead in the + rail and its − lead in the − rail';
+    if (t === 'SW1') bbWhere = `pins in rows ${L.sw.map(p => p[0]).join(', ')}, hole ${L.sw[0][1]}. The middle pin is common; when the switch is on, it connects to row ${L.sw[0][0]}. Row ${L.unused.r} is not used`;
+    if (t === 'R1') bbWhere = `legs in ${holeName(L.r1[0])} and ${holeName(L.r1[1])}`;
+    if (t === 'LED1') bbWhere = `long leg (+) in ${holeName(L.led[0])}, short leg (−) in ${holeName(L.led[1])}`;
+    return { title: P.name, text: `Breadboard: ${bbWhere}. Schematic: ${P.sc}.` + (P.extra ? ' ' + P.extra : '') };
+  }
+  function showInfo(id) {
+    const box = $('#info');
+    if (!id) { box.replaceChildren(h('h3', {}, 'Explore'), h('p', {}, 'Point at or tab to anything on either side. Use the arrow keys to move along the circuit. Press Enter to pin a highlight.')); return; }
+    const d = describe(id);
+    box.replaceChildren(...[h('h3', {}, d.title), h('p', {}, d.text), pinned ? h('div', { class: 'pin-note' }, 'Pinned. Press Enter or click again to unpin.') : null].filter(Boolean));
+  }
+  function setCur(id) { current = id; if (!pinned) { applyHL(id); showInfo(id); } }
+  function clearCur(id) { if (current === id) current = null; if (!pinned) { applyHL(null); showInfo(null); } }
+  function pin(id) {
+    if (checkMode) { answer(id); return; }
+    pinned = pinned === id ? null : id;
+    applyHL(pinned || current); showInfo(pinned || current);
+  }
+
+  function render() {
+    const keep = pinned;
+    reg = {};
+    drawBB(); drawSC();
+    pinned = keep && reg[keep] ? keep : null;
+    applyHL(pinned); showInfo(pinned);
+  }
+
+  /* ---------- layout + switch toggles ---------- */
+  $$('[data-layout]').forEach(b => b.addEventListener('click', () => {
+    layout = b.dataset.layout;
+    $$('[data-layout]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    pinned = null; render();
+    announce(`Layout ${layout}. The parts moved to different rows${layout === 'B' ? ' and R1 is turned around' : ''}, but the schematic is the same: different placement, same connections.`);
+    if (checkMode) startCheck();
+  }));
+  $('#swBtn').addEventListener('click', () => {
+    swOn = !swOn; $('#swBtn').textContent = swOn ? 'Turn switch off' : 'Turn switch on';
+    render(); announce(`Switch ${swOn ? 'on: the LED lights' : 'off: the LED goes dark'}.`);
+  });
+
+  /* ---------- self-check ---------- */
+  let qs = [], qi = 0;
+  function makeQuestions() {
+    const L = LAYOUTS[layout];
+    const ledRow = L.strips['Nled'][0];
+    const negRow = L.strips['N-'][0];
+    return [
+      { prompt: `Select the schematic wire that matches row ${ledRow.r} (holes ${side(ledRow.s)}) on the breadboard.`, ok: id => targetOf(id) === 'Nled' && reg[id].sc.length && !reg[id].bb.length, why: `Row ${ledRow.r} joins R1 and the LED’s long leg, which is the wire between R1 and LED1.` },
+      { prompt: `Select the schematic symbol for the part in rows ${L.sw[0][0]} to ${L.sw[2][0]}, hole ${L.sw[0][1]}.`, ok: id => id === 'SW1', why: 'That is the slide switch, SW1.' },
+      { prompt: 'Select the breadboard row where the LED’s short (−) leg goes.', ok: id => id === `s:${negRow.r}${negRow.s}`, why: `The short leg is in row ${negRow.r} (${side(negRow.s)}), which connects to the − rail through jumper W3.` },
+      { prompt: 'Select a breadboard jumper wire that is part of the schematic wire between SW1 and R1.', ok: id => id === 'W2', why: 'Jumper W2 links the switch’s row to the resistor’s row, so it is part of that one connection.' }
+    ];
+  }
+  function startCheck() { qs = makeQuestions(); qi = 0; drawCheck(); }
+  function drawCheck(fb) {
+    const box = $('#checkBox');
+    if (qi >= qs.length) { box.replaceChildren(h('div', { class: 'check' }, feedback('ok', 'All four done', ' Try Layout ' + (layout === 'A' ? 'B' : 'A') + ': the rows change, but the connections do not.'), h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn btn-small', type: 'button', onclick: startCheck }, 'Start over')))); return; }
+    box.replaceChildren(h('div', { class: 'check' }, h('div', { class: 'small muted' }, `Question ${qi + 1} of ${qs.length}`), h('div', { class: 'prompt' }, qs[qi].prompt), fb));
+    announce(`Question ${qi + 1}: ${qs[qi].prompt}`);
+  }
+  function answer(id) {
+    const q = qs[qi];
+    if (q.ok(id)) { qi++; const done = feedback('ok', null, ' ' + q.why); drawCheck(); $('#checkBox .check').prepend(done); announce('Correct. ' + q.why); }
+    else { drawCheck(feedback('bad', null, ' That is ' + (describe(id).title) + '. Try again.')); }
+  }
+  $('#checkBtn').addEventListener('click', () => {
+    checkMode = !checkMode;
+    $('#checkBtn').setAttribute('aria-pressed', String(checkMode));
+    $('#checkBtn').textContent = checkMode ? 'Back to exploring' : 'Check yourself';
+    $('#checkBox').hidden = !checkMode;
+    pinned = null; applyHL(null); showInfo(null);
+    if (checkMode) startCheck();
+  });
+
+  render();
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> A schematic and a breadboard can look completely different and still describe the same electrical connections.</p>
+    <p><strong>Time:</strong> about 2&ndash;3 minutes, plus the self-check.</p>
+    <ul>
+      <li>The circuit: a 9 V battery, a slide switch, a 470 &Omega; resistor and a red LED, which gives about 15 mA through the LED. These values are safe to copy onto a real board.</li>
+      <li>The biggest &ldquo;aha&rdquo;: choosing any hole in a row highlights all five connected holes, plus every other row, rail and jumper in the same connection. Those all map to one wire on the schematic.</li>
+      <li>Layout B moves every part and turns the resistor around. The schematic does not change, because the connections do not change.</li>
+      <li>Keyboard: Tab into either diagram, then use the arrow keys to move along the circuit. Enter pins a highlight.</li>
+      <li>Suggested tie-in: have students build Layout A, then rebuild it as Layout B (or their own layout) and check it against the schematic.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

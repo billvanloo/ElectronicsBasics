@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+{{HEAD}}
+<title>Multimeter Placement Lab</title>
+<meta name="description" content="Set up a virtual multimeter and place its probes to measure voltage, current and resistance on a breadboard circuit.">
+<style>
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .layout > .panel + .panel { margin-top: 0; }
+  .layout > * { min-width: 0; }
+  @media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .meter-col { position: sticky; top: 12px; }
+  @media (max-width: 960px) { .meter-col { position: static; } }
+  .meter-svg { max-width: 300px; margin: 0 auto; }
+  .meter-svg svg { display: block; width: 100%; height: auto; }
+  .ctl { display: grid; gap: 10px; margin-top: 12px; }
+  .ctl .line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ctl .k { font-weight: 700; font-size: .92rem; min-width: 7.5em; }
+  .ctl select { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--surface); flex: 1 1 12em; max-width: 100%; }
+  .seg button { min-width: 44px; }
+  .tp { cursor: pointer; }
+  .tp .ring { fill: #fff; stroke: #7b3fe4; stroke-width: 2.5; }
+  .tp:focus-visible .ring, .tp:hover .ring { stroke-width: 4; fill: #efe6ff; }
+  .tp .tag rect { fill: #fff; stroke: #7b3fe4; stroke-width: 1.3; }
+  .tp .tag text { font: 800 11px var(--font); fill: #5a2bb0; }
+  .tp:focus { outline: none; }
+  .tp:focus-visible .tag rect { stroke-width: 3; }
+  .circuit-ctl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .msg:empty { display: none; }
+  .tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .tasks li { display: flex; gap: 10px; align-items: center; }
+  .tasks .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: .8rem; font-weight: 800; flex: none; }
+  .tasks li.done .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .tasks li.done .box::before { content: "\2713"; }
+  .tasks li.done .t { color: var(--ink-2); }
+  .err-list { display: grid; gap: 6px; margin: 8px 0; }
+  .err-list label { display: flex; gap: 10px; align-items: center; min-height: 40px; }
+  .err-list input { width: 18px; height: 18px; accent-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Multimeter Placement Lab</h1>
+      <p class="lede">Measure voltage, current and resistance on a breadboard circuit. Choose the meter&rsquo;s mode, plug in the red lead, and place both probes. The meter tells you when a setup is wrong, and why.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <section class="panel" aria-labelledby="h-board">
+        <h2 id="h-board">Circuit: 9 V battery, switch SW1, R1 = 1.0 k&Omega;, R2 = 2.2 k&Omega; in series</h2>
+        <div class="stage" id="board"></div>
+        <div class="circuit-ctl" role="group" aria-label="Circuit controls">
+          <button class="btn btn-small" id="swBtn" type="button">Switch SW1: ON</button>
+          <button class="btn btn-small" id="g1Btn" type="button">Open gap 1 (lift jumper J1)</button>
+          <button class="btn btn-small" id="g2Btn" type="button">Open gap 2 (lift jumper J2)</button>
+        </div>
+        <p class="small muted" style="margin:10px 0 0">Click a purple test point to place the probe chosen under &ldquo;Click places.&rdquo; To measure current, open a gap first, then put the meter across the gap so the current must flow through it.</p>
+      </section>
+
+      <div class="meter-col">
+        <section class="panel" aria-labelledby="h-meter">
+          <h2 id="h-meter">Multimeter</h2>
+          <div class="meter-svg" id="meter"></div>
+          <div class="ctl">
+            <div class="line"><span class="k" id="lbl-dial">Dial</span><div class="seg" role="group" aria-labelledby="lbl-dial" id="dial"></div></div>
+            <div class="line"><span class="k" id="lbl-jack">Red lead jack</span><div class="seg" role="group" aria-labelledby="lbl-jack" id="jack"></div><span class="small muted">The black lead stays in COM.</span></div>
+            <div class="line"><label class="k" for="redSel">Red probe</label><select id="redSel"></select></div>
+            <div class="line"><label class="k" for="blackSel">Black probe</label><select id="blackSel"></select></div>
+            <div class="line"><span class="k" id="lbl-click">Click places</span><div class="seg" role="group" aria-labelledby="lbl-click" id="placing"></div><button class="btn btn-small" id="clearProbes" type="button">Remove probes</button></div>
+          </div>
+          <div class="msg" id="msg" style="margin-top:12px"></div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn btn-primary" id="record" type="button" disabled>Record reading</button>
+            <button class="btn btn-small" id="resetFuse" type="button" hidden>Replace fuse</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="layout" style="margin-top:16px">
+      <section class="panel" aria-labelledby="h-tasks">
+        <h2 id="h-tasks">Tasks</h2>
+        <ol class="tasks" id="tasks"></ol>
+        <p class="small muted" style="margin:10px 0 0">Type your predictions into the table first (use the labeled values and Ohm&rsquo;s law), then record a reading for each task.</p>
+      </section>
+      <section class="panel" aria-labelledby="h-data">
+        <div class="stage-title"><h2 id="h-data" style="margin:0">Data table</h2><button class="btn btn-small" id="csv" type="button">Download CSV</button></div>
+        <div class="table-wrap"><table class="data" id="table">
+          <caption class="sr-only">Predicted and measured values</caption>
+          <thead><tr><th>Quantity</th><th class="num">Predicted</th><th class="num">Measured</th><th>Unit</th><th class="num">% difference</th></tr></thead>
+          <tbody></tbody></table></div>
+        <div id="errors" style="margin-top:12px"></div>
+      </section>
+    </div>
+  </main>
+  <div id="about"></div>
+  {{FOOT}}
+</div>
+{{SCRIPTS}}
+<script>
+(() => {
+  const { h, $, $$, sig, feedback, about, announce, downloadCSV, fmtR } = UI;
+  const S = Schem;
+
+  /* ---------- this session's real parts (within tolerance) ---------- */
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const PARTS = { Vb: +rnd(8.6, 9.4).toFixed(2), R1: Math.round(1000 * rnd(0.95, 1.05)), R2: Math.round(2200 * rnd(0.95, 1.05)), Rint: 1.5 };
+  const NOM = { Vb: 9, R1: 1000, R2: 2200 };
+
+  /* ---------- state ---------- */
+  const st = { sw: true, gap1: false, gap2: false, dial: 'V', jack: 'VO', red: null, black: null, placing: 'red', fuse: false, data: {}, pred: {} };
+
+  /* ---------- test points: id -> { node, hole, label, desc, side } ---------- */
+  const TP = {
+    TP1: { node: 'P', hole: [13, 'L+'], side: 'left', desc: 'TP1: + rail (battery +)' },
+    TP2: { node: 'n5', hole: [5, 'a'], side: 'left', desc: 'TP2: top of R1 (after the switch)' },
+    TP3: { node: 'n10L', hole: [10, 'a'], side: 'left', desc: 'TP3: between R1 and R2' },
+    TP4: { node: 'N', hole: [16, 'i'], side: 'right', desc: 'TP4: bottom of R2' },
+    TP5: { node: 'N', hole: [20, 'R-'], side: 'right', desc: 'TP5: − rail (battery −)' },
+    '1A': { node: 'P', hole: [4, 'L+'], side: 'left', gap: 1, dy: -18, desc: 'Gap 1, end A (+ rail side)' },
+    '1B': { node: 'n4', hole: [4, 'a'], side: 'left', gap: 1, desc: 'Gap 1, end B (switch side)' },
+    '2A': { node: 'n10L', hole: [10, 'd'], side: 'left', gap: 2, dy: -20, desc: 'Gap 2, end A (R1 side)' },
+    '2B': { node: 'n10R', hole: [10, 'g'], side: 'right', gap: 2, desc: 'Gap 2, end B (R2 side)' }
+  };
+  const tpAvailable = id => !TP[id].gap || (TP[id].gap === 1 ? st.gap1 : st.gap2);
+
+  /* ---------- circuit solve with an optional meter element ---------- */
+  function netlist(extra, opts = {}) {
+    const p = [
+      { id: 'BAT', type: 'vsource', pos: 'Pi', neg: 'N', V: opts.noBattery ? 0 : PARTS.Vb },
+      { id: 'RINT', type: 'resistor', a: 'Pi', b: 'P', R: PARTS.Rint },
+      { id: 'SW1', type: 'switch', a: 'n4', b: 'n5', closed: st.sw },
+      { id: 'R1', type: 'resistor', a: 'n5', b: 'n10L', R: PARTS.R1 },
+      { id: 'R2', type: 'resistor', a: 'n10R', b: 'N', R: PARTS.R2 }
+    ];
+    if (!st.gap1) p.push({ id: 'J1', type: 'wire', a: 'P', b: 'n4' });
+    if (!st.gap2) p.push({ id: 'J2', type: 'wire', a: 'n10L', b: 'n10R' });
+    if (extra) p.push(extra);
+    return Engine.solve(p, { ground: 'N' });
+  }
+  // which nodes are joined by ideal links (for naming what the probes are across)
+  function canon(n) {
+    const join = { n10R: !st.gap2 ? 'n10L' : 'n10R', n4: !st.gap1 ? 'P' : 'n4' };
+    return join[n] || n;
+  }
+  function pairKey(a, b) { return [canon(a), canon(b)].sort().join('|'); }
+  const PAIRS = () => ({
+    [pairKey('n5', 'n10L')]: 'R1',
+    [pairKey('n10R', 'N')]: 'R2',
+    [pairKey('P', 'N')]: 'battery',
+    ...(st.gap1 ? { [pairKey('P', 'n4')]: 'gap1' } : {}),
+    ...(st.gap2 ? { [pairKey('n10L', 'n10R')]: 'gap2' } : {}),
+    ...(!st.sw ? { [pairKey(st.gap1 ? 'n4' : 'P', 'n5')]: 'switch' } : {})
+  });
+
+  /* ---------- the measurement ---------- */
+  function measure() {
+    const out = { display: '', unit: '', value: null, kind: 'none', msgs: [], task: null };
+    const msg = (kind, title, text) => out.msgs.push({ kind, title, text });
+    if (st.fuse) { out.display = 'FUSE'; msg('warn', 'Fuse blown', ' The meter’s current fuse is open. Remove the probes, then press “Replace fuse.” In a real lab, ask your teacher before replacing a fuse.'); return out; }
+    if (st.dial === 'OFF') { out.display = ''; return out; }
+    const unitOf = { V: 'V', mA: 'mA', O: 'Ω' };
+    out.unit = unitOf[st.dial];
+    if (!st.red || !st.black) { out.display = st.dial === 'O' ? 'OL' : '0.00'; msg('info', 'Place both probes', ' Choose where the red and black probes go.'); return out; }
+    const a = TP[st.red].node, b = TP[st.black].node;
+    const across = PAIRS()[pairKey(a, b)];
+    const same = canon(a) === canon(b);
+    const powered = netlist(null);
+    const circuitComplete = !st.gap1 && !st.gap2 && st.sw;
+
+    // red lead in the mA jack: the meter is a low-resistance path no matter what the dial says
+    if (st.jack === 'mA') {
+      const r = netlist({ id: 'M', type: 'ammeter', a, b });
+      const I = r.I.M;
+      if (Math.abs(I) > 0.2) {
+        st.fuse = true;
+        out.display = 'FUSE';
+        msg('warn', 'Near short circuit: fuse blown', ` The ammeter has almost no resistance, so connecting it across ${across === 'battery' ? 'the battery' : 'these points'} let a large current flow (over ${Math.floor(Math.abs(I))} A). This can blow the meter’s fuse or overheat the battery. Never connect an ammeter in parallel with a source. Turn off power, remove the probes, and replace the fuse.`);
+        return out;
+      }
+      if (st.dial !== 'mA') {
+        out.display = st.dial === 'O' ? 'OL' : '0.00';
+        msg('bad', 'Check which jack the red lead is in', ` The dial is set to ${st.dial === 'V' ? 'voltage' : 'resistance'}, but the red lead is in the mA jack. Move the red lead to VΩ.` + (Math.abs(I) > 1e-6 ? ' (Current is flowing through the meter right now, which changes the circuit.)' : ''));
+        return out;
+      }
+      // dial at mA, jack mA
+      const mA = I * 1000;
+      out.value = round3(mA); out.display = fmtNum(out.value); out.kind = 'I';
+      if (same || Math.abs(mA) < 0.005) {
+        msg('info', 'No current through the meter', same ? ' Both probes are on the same connection, so no current goes through the meter.' : (!circuitComplete && !(across === 'gap1' || across === 'gap2' || across === 'switch')) ? ' The circuit is not complete, so no current flows. Check the switch and the gaps.' : ' No current is flowing through the meter here.');
+      } else if (across === 'gap1' || across === 'gap2' || across === 'switch') {
+        const otherOpen = (across === 'gap1' && st.gap2) || (across === 'gap2' && st.gap1) || (across !== 'switch' && !st.sw);
+        if (otherOpen) msg('info', 'Ammeter in series', ' The meter is in series, but another break in the circuit stops the current. Close the other gap and turn the switch on.');
+        else {
+          msg('ok', 'Ammeter in series: correct', across === 'switch' ? ' With SW1 off, the meter across the switch completes the circuit, so all of the current flows through it. Opening a gap works the same way.' : ' The circuit is broken at the gap, so all of the current must pass through the meter.');
+          out.task = 'I';
+        }
+        if (mA < 0) msg('info', 'Negative reading', ' The minus sign means current enters the black probe. The probes are swapped; the size of the reading is still correct.');
+      } else {
+        const what = across === 'R1' ? 'R1' : across === 'R2' ? 'R2' : 'part of the circuit';
+        msg('bad', 'Ammeter in parallel: wrong reading', ` The ammeter has almost no resistance, so it made a shortcut around ${what}. ${what === 'part of the circuit' ? 'That part' : what} now carries almost no current, and the reading is not the normal circuit current. Put the ammeter in series: open a gap and place the probes across it.`);
+      }
+      return out;
+    }
+
+    // red lead in VΩ
+    if (st.dial === 'mA') {
+      out.display = '0.00';
+      msg('bad', 'Check which jack the red lead is in', ' The dial is set to current (mA), but the red lead is in the VΩ jack. Move the red lead to the mA jack.');
+      return out;
+    }
+    if (st.dial === 'V') {
+      const r = netlist({ id: 'M', type: 'voltmeter', a, b });
+      const v = r.V[a] - r.V[b];
+      out.value = round3(v); out.display = fmtNum(out.value); out.kind = 'V';
+      if (same) msg('info', 'Same connection', ' Both probes touch the same connection, so there is no voltage between them. Place the probes on either side of a part.');
+      else if (across === 'R1' || across === 'R2' || across === 'battery') {
+        if (circuitComplete || across === 'battery') {
+          msg('ok', 'Voltmeter in parallel: correct', ` The probes are on either side of ${across === 'battery' ? 'the battery' : across}, so the meter reads the voltage across it.`);
+          if (across === 'R1') out.task = 'V1';
+          if (across === 'R2') out.task = 'V2';
+        } else msg('info', 'Circuit not complete', ` With ${!st.sw ? 'the switch off' : 'a gap open'}, no current flows, so ${across} has no voltage across it. Close the circuit to measure its normal voltage.`);
+      } else if (across === 'gap1' || across === 'gap2' || across === 'switch') {
+        msg('bad', 'Voltmeter in series', ` The voltmeter now sits in the path of the current. It has a very high resistance, so it blocks the current: the circuit stops working, and the meter reads about the full battery voltage instead of a part’s voltage. To measure a part’s voltage, place the probes on either side of it with the circuit closed.`);
+      } else msg('info', 'Across more than one part', ' The probes span more than one part, so this is the voltage across that whole section. For one part, place the probes right on either side of it.');
+      if (v < -0.005 && !same) msg('info', 'Negative reading', ' The minus sign means the probes are swapped (red is on the lower-voltage side). The size of the reading is still correct.');
+      return out;
+    }
+    // ohms
+    const vPresent = Math.abs(powered.V[a] - powered.V[b]);
+    if (!same && vPresent > 0.01) {
+      out.display = '---';
+      msg('warn', 'Resistance readings are not valid with power on', ' There is a voltage between the probes. An ohmmeter uses its own small battery, so outside voltage spoils the reading and can damage some meters. Turn SW1 off (and never measure resistance across a battery).');
+      return out;
+    }
+    if (same) { out.value = 0; out.display = '0.0'; out.kind = 'R'; msg('info', 'Same connection', ' Both probes touch the same connection, so the meter reads about 0 Ω.'); return out; }
+    const r = netlist({ id: 'M', type: 'vsource', pos: a, neg: b, V: 1 }, { noBattery: true });
+    const R = Math.abs(1 / r.I.M);
+    if (!isFinite(R) || R > 2e7) { out.display = 'OL'; out.kind = 'R'; msg('info', 'OL (open)', ' There is no complete path between the probes, so the resistance is too high to measure.'); return out; }
+    out.value = R; out.kind = 'R';
+    out.display = R >= 1000 ? fmtNum(round3(R / 1000)) : fmtNum(round3(R));
+    out.unit = R >= 1000 ? 'kΩ' : 'Ω';
+    if (across === 'R1' || across === 'R2') {
+      msg('ok', 'Power off: correct', ` The ohmmeter reads the resistance of ${across}.` + (across === 'R1' ? '' : ''));
+      if (across === 'R1') out.task = 'R1';
+    } else msg('info', 'Resistance of this section', ' The probes span more than one part, so this is the resistance of that whole section.');
+    return out;
+  }
+  const round3 = x => Number(Number(x).toPrecision(3));
+  const fmtNum = x => { const a = Math.abs(x); return a >= 100 ? x.toFixed(0) : a >= 10 ? x.toFixed(1) : x.toFixed(2); };
+
+  /* ---------- breadboard drawing ---------- */
+  const bsvg = S.svg(520, 524, { role: 'group' });
+  bsvg.setAttribute('aria-label', 'Breadboard circuit with test points');
+  $('#board').append(bsvg);
+  function drawBoard() {
+    bsvg.replaceChildren();
+    const board = new BB.Breadboard(bsvg, { rows: 26, x: 100, y: 2 });
+    const H = (r, c) => board.hole(r, c);
+    const bat = BB.battery9v(bsvg, 16, 418);
+    BB.lead(bsvg, bat.pos, H(22, 'L+'), '#d63b32', { bend: 30, by: 0, bx: -30, down: false });
+    BB.lead(bsvg, bat.neg, H(23, 'L-'), '#222', { bend: 20, by: 0, bx: -24, down: false });
+    S.el('text', { x: 45, y: 530 - 8, 'text-anchor': 'middle', class: 'lbl-sm', text: 'Battery' }, bsvg);
+    const parts = S.el('g', {}, bsvg);
+    // jumper J1 (gap 1) and J2 (gap 2)
+    const jumper = (from, to, color, open, name) => {
+      if (!open) { BB.wire(parts, [H(...from), H(...to)], color); const m = H(...from), n = H(...to); S.el('text', { x: (m[0] + n[0]) / 2, y: m[1] - 8, 'text-anchor': 'middle', class: 'lbl-sm', text: name }, parts); return; }
+      const m = H(...from), n = H(...to);
+      const g = S.el('g', { opacity: .45, transform: 'translate(8 -16)' }, parts);
+      BB.wire(g, [m, n], color);
+      S.el('text', { x: (m[0] + n[0]) / 2, y: m[1] - 20, 'text-anchor': 'middle', class: 'lbl-sm', text: name + ' (lifted)' }, parts);
+      S.el('path', { d: `M${m[0]} ${m[1]} L${n[0]} ${n[1]}`, class: 'open-mark' }, parts);
+    };
+    jumper([4, 'L+'], [4, 'a'], '#d63b32', st.gap1, 'J1');
+    BB.slideSwitch(parts, [H(4, 'c'), H(5, 'c'), H(6, 'c')], st.sw);
+    S.el('text', { x: H(5, 'c')[0] - 16, y: H(5, 'c')[1] + 4, 'text-anchor': 'end', class: 'lbl-sm', text: '' }, parts);
+    BB.resistor(parts, H(5, 'e'), H(10, 'e'), NOM.R1);
+    jumper([10, 'd'], [10, 'g'], '#2e9d3a', st.gap2, 'J2');
+    BB.resistor(parts, H(10, 'h'), H(16, 'h'), NOM.R2);
+    BB.wire(parts, [H(16, 'j'), H(16, 'R-')], '#222');
+    BB.wire(parts, [H(24, 'R-'), H(24, 'L-')], '#222');
+    // part labels
+    const lab = (x, y, t, anchor = 'start') => { const g = S.el('g', { class: 'vtag' }, parts); const w = 8 + t.length * 7.2; const x0 = anchor === 'start' ? x : x - w; S.el('rect', { x: x0, y: y - 10, width: w, height: 20, rx: 5 }, g); S.el('text', { x: x0 + w / 2, y: y + 4.5, 'text-anchor': 'middle', text: t }, g); };
+    lab(H(7, 'e')[0] + 14, H(7, 'e')[1] + 9, 'R1');
+    lab(H(13, 'h')[0] + 14, H(13, 'h')[1], 'R2');
+    lab(H(6, 'c')[0] - 12, H(6, 'c')[1] + 24, 'SW1 ' + (st.sw ? 'ON' : 'OFF'), 'end');
+    // test points
+    const tps = S.el('g', {}, bsvg);
+    for (const [id, t] of Object.entries(TP)) {
+      if (!tpAvailable(id)) continue;
+      const [x, y] = H(...t.hole);
+      const g = S.el('g', { class: 'tp', 'data-tp': id }, tps);
+      const lx = t.side === 'left' ? 52 : 470, ly = y + (t.dy || 0);
+      const tagW = 34;
+      S.el('path', { d: `M${t.side === 'left' ? lx + tagW / 2 : lx - tagW / 2} ${ly} L${x} ${y}`, stroke: '#7b3fe4', 'stroke-width': 1.4, fill: 'none' }, g);
+      S.el('circle', { cx: x, cy: y, r: 14, fill: 'transparent' }, g);
+      S.el('circle', { cx: x, cy: y, r: 7.5, class: 'ring' }, g);
+      const tg = S.el('g', { class: 'tag' }, g);
+      S.el('rect', { x: lx - tagW / 2, y: ly - 9, width: tagW, height: 18, rx: 5 }, tg);
+      S.el('text', { x: lx, y: ly + 4, 'text-anchor': 'middle', text: id }, tg);
+      UI.makeFocusable(g, { label: `${t.desc}. Place the ${st.placing} probe here.`, onActivate: () => placeProbe(id) });
+      g.classList.add('tp');
+    }
+    // probes
+    const probe = (id, color, word) => {
+      if (!id || !tpAvailable(id)) return;
+      const [x, y] = H(...TP[id].hole);
+      const g = S.el('g', { 'aria-hidden': 'true', style: 'pointer-events:none' }, bsvg);
+      const dx = color === '#d63b32' ? -26 : 26;
+      S.el('path', { d: `M${x} ${y} L${x + dx * .45} ${y - 16}`, stroke: '#9aa1a8', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+      S.el('path', { d: `M${x + dx * .45} ${y - 16} L${x + dx} ${y - 44}`, stroke: color, 'stroke-width': 9, 'stroke-linecap': 'round' }, g);
+      const w = word.length * 7 + 10;
+      S.el('rect', { x: x + dx - w / 2, y: y - 66, width: w, height: 17, rx: 4, fill: color }, g);
+      S.el('text', { x: x + dx, y: y - 54, 'text-anchor': 'middle', text: word, style: 'font:800 10.5px system-ui,sans-serif;fill:#fff' }, g);
+    };
+    probe(st.red, '#d63b32', 'RED');
+    probe(st.black, '#1f2328', 'BLACK');
+  }
+
+  /* ---------- meter drawing ---------- */
+  const msvg = S.svg(300, 380, { role: 'img' });
+  $('#meter').append(msvg);
+  const DIAL = [{ k: 'OFF', label: 'OFF', a: -90 }, { k: 'V', label: 'V⎓', a: -30 }, { k: 'mA', label: 'mA⎓', a: 30 }, { k: 'O', label: 'Ω', a: 90 }];
+  function drawMeter(m) {
+    msvg.replaceChildren();
+    const E = (t, a, p = msvg) => S.el(t, a, p);
+    E('rect', { x: 4, y: 4, width: 292, height: 372, rx: 28, fill: '#f2b81c', stroke: '#b58200', 'stroke-width': 2 });
+    E('rect', { x: 22, y: 20, width: 256, height: 336, rx: 18, fill: '#2b2f36' });
+    // LCD
+    E('rect', { x: 40, y: 36, width: 220, height: 84, rx: 8, fill: '#c9d4c1', stroke: '#8a9783', 'stroke-width': 2 });
+    const disp = m.display;
+    const unitShown = /^-?[\d.]+$/.test(disp || '') || disp === 'OL' ? (m.unit || '') : '';
+    E('text', { x: 236, y: 98, 'text-anchor': 'end', text: disp || '', style: `font:700 ${disp && disp.length > 5 ? 38 : 46}px ui-monospace,Menlo,Consolas,monospace;fill:#1d241b` });
+    E('text', { x: 244, y: 112, 'text-anchor': 'end', text: disp && st.dial !== 'OFF' ? unitShown : '', style: 'font:800 14px system-ui,sans-serif;fill:#1d241b' });
+    if (st.dial !== 'OFF') E('text', { x: 50, y: 54, text: { V: 'DC V', mA: 'DC mA', O: 'OHM' }[st.dial], style: 'font:800 11px system-ui,sans-serif;fill:#1d241b' });
+    // dial
+    const cx = 150, cy = 214;
+    E('circle', { cx, cy, r: 52, fill: '#1c1f24', stroke: '#111' });
+    DIAL.forEach(d => {
+      const rad = (d.a - 90) * Math.PI / 180;
+      const on = d.k === st.dial;
+      E('text', { x: cx + Math.cos(rad) * 72, y: cy + Math.sin(rad) * 72 + 5, 'text-anchor': 'middle', text: d.label, style: `font:800 14px system-ui,sans-serif;fill:${on ? '#ffd21f' : '#c9d0d9'}` });
+      E('path', { d: `M${cx + Math.cos(rad) * 54} ${cy + Math.sin(rad) * 54} L${cx + Math.cos(rad) * 60} ${cy + Math.sin(rad) * 60}`, stroke: on ? '#ffd21f' : '#7d848c', 'stroke-width': 3 });
+    });
+    const cur = DIAL.find(d => d.k === st.dial), rad = (cur.a - 90) * Math.PI / 180;
+    E('circle', { cx, cy, r: 36, fill: '#3a4049' });
+    E('path', { d: `M${cx} ${cy} L${cx + Math.cos(rad) * 34} ${cy + Math.sin(rad) * 34}`, stroke: '#fff', 'stroke-width': 7, 'stroke-linecap': 'round' });
+    // jacks
+    const jacks = [{ k: 'mA', x: 70, label: 'mA' }, { k: 'COM', x: 150, label: 'COM' }, { k: 'VO', x: 230, label: 'VΩ' }];
+    jacks.forEach(j => {
+      E('circle', { cx: j.x, cy: 318, r: 15, fill: '#111', stroke: j.k === 'mA' ? '#d63b32' : '#7d848c', 'stroke-width': 3 });
+      E('text', { x: j.x, y: 296, 'text-anchor': 'middle', text: j.label, style: 'font:800 12px system-ui,sans-serif;fill:#c9d0d9' });
+      const plug = (j.k === 'COM') ? '#1f2328' : (j.k === st.jack ? '#d63b32' : null);
+      if (plug) { E('circle', { cx: j.x, cy: 318, r: 10, fill: plug, stroke: j.k === 'COM' ? '#888' : '#fff', 'stroke-width': 2 }); E('path', { d: `M${j.x} 328 L${j.x} 372`, stroke: plug, 'stroke-width': 7, 'stroke-linecap': 'round' }); }
+    });
+    E('text', { x: 70, y: 346, 'text-anchor': 'middle', text: 'FUSED 200mA', style: 'font:700 8px system-ui,sans-serif;fill:#c9d0d9' });
+    msvg.setAttribute('aria-label', `Multimeter. Dial: ${{ OFF: 'off', V: 'DC volts', mA: 'DC milliamps', O: 'ohms' }[st.dial]}. Red lead in the ${st.jack === 'mA' ? 'mA' : 'V ohm'} jack, black lead in COM. Display: ${disp ? UI.spokenUnits(disp + ' ' + unitShown) : 'blank'}.`);
+  }
+
+  /* ---------- controls ---------- */
+  const seg = (mount, opts, get, set) => {
+    const btns = opts.map(o => h('button', { type: 'button', 'aria-pressed': String(get() === o.k) }, o.label));
+    btns.forEach((b, i) => b.addEventListener('click', () => { set(opts[i].k); btns.forEach((x, j) => x.setAttribute('aria-pressed', String(get() === opts[j].k))); }));
+    mount.replaceChildren(...btns);
+    return () => btns.forEach((x, j) => x.setAttribute('aria-pressed', String(get() === opts[j].k)));
+  };
+  let lastNote = null;
+  const syncDial = seg($('#dial'), [{ k: 'OFF', label: 'OFF' }, { k: 'V', label: 'V⎓' }, { k: 'mA', label: 'mA⎓' }, { k: 'O', label: 'Ω' }], () => st.dial, k => {
+    if (k === st.dial) return;
+    if (st.red || st.black) { st.red = st.black = null; lastNote = { kind: 'info', title: 'Remove probes before changing modes', text: ' Turning the dial while the probes are connected can damage a meter, so the probes were lifted off. Place them again.' }; }
+    st.dial = k; update();
+  });
+  const syncJack = seg($('#jack'), [{ k: 'VO', label: 'VΩ' }, { k: 'mA', label: 'mA' }], () => st.jack, k => { st.jack = k; update(); });
+  const syncPlacing = seg($('#placing'), [{ k: 'red', label: 'Red' }, { k: 'black', label: 'Black' }], () => st.placing, k => { st.placing = k; drawBoard(); });
+
+  function fillSelects() {
+    for (const [sel, key] of [[$('#redSel'), 'red'], [$('#blackSel'), 'black']]) {
+      sel.replaceChildren(h('option', { value: '' }, 'Not placed'), ...Object.entries(TP).filter(([id]) => tpAvailable(id)).map(([id, t]) => h('option', { value: id }, t.desc)));
+      sel.value = st[key] && tpAvailable(st[key]) ? st[key] : '';
+    }
+  }
+  $('#redSel').addEventListener('change', e => { st.red = e.target.value || null; update(); });
+  $('#blackSel').addEventListener('change', e => { st.black = e.target.value || null; update(); });
+  $('#clearProbes').addEventListener('click', () => { st.red = st.black = null; update(); announce('Probes removed.'); });
+  function placeProbe(id) {
+    st[st.placing] = id;
+    announce(`${st.placing === 'red' ? 'Red' : 'Black'} probe on ${TP[id].desc}.`);
+    // next click places the other probe
+    st.placing = st.placing === 'red' ? 'black' : 'red'; syncPlacing();
+    update();
+    const el = bsvg.querySelector(`[data-tp="${id}"]`); if (el) el.focus();
+  }
+  $('#swBtn').addEventListener('click', () => { st.sw = !st.sw; $('#swBtn').textContent = 'Switch SW1: ' + (st.sw ? 'ON' : 'OFF'); update(); announce('Switch ' + (st.sw ? 'on' : 'off')); });
+  const gapBtn = (n) => {
+    const key = 'gap' + n, b = $('#g' + n + 'Btn');
+    b.addEventListener('click', () => {
+      st[key] = !st[key];
+      b.textContent = st[key] ? `Close gap ${n} (replace jumper J${n})` : `Open gap ${n} (lift jumper J${n})`;
+      if (!st[key]) { for (const p of ['red', 'black']) if (st[p] && TP[st[p]].gap === n) st[p] = null; }
+      update();
+      announce(st[key] ? `Jumper J${n} lifted. Gap ${n} is open, and its two ends are now test points ${n}A and ${n}B.` : `Jumper J${n} replaced. Gap ${n} closed.`);
+    });
+  };
+  gapBtn(1); gapBtn(2);
+  $('#resetFuse').addEventListener('click', () => { st.fuse = false; st.red = st.black = null; update(); announce('Fuse replaced. Probes removed.'); });
+
+  /* ---------- tasks + data ---------- */
+  const TASKS = [
+    { k: 'V1', text: 'Measure the voltage across R1.', unit: 'V', q: 'Voltage across R1' },
+    { k: 'V2', text: 'Measure the voltage across R2.', unit: 'V', q: 'Voltage across R2' },
+    { k: 'I', text: 'Measure the current in the circuit.', unit: 'mA', q: 'Circuit current' },
+    { k: 'R1', text: 'Measure the resistance of R1.', unit: 'Ω', q: 'Resistance of R1' }
+  ];
+  let meas;
+  $('#record').addEventListener('click', () => {
+    if (!meas || !meas.task) return;
+    let v = meas.value;
+    if (meas.task === 'I' || meas.task === 'V1' || meas.task === 'V2') v = Math.abs(v);
+    st.data[meas.task] = v;
+    announce(`Recorded: ${TASKS.find(t => t.k === meas.task).q}, ${v} ${TASKS.find(t => t.k === meas.task).unit}.`);
+    drawTasks(); drawTable();
+  });
+  function drawTasks() {
+    $('#tasks').replaceChildren(...TASKS.map((t, i) => {
+      const done = st.data[t.k] != null;
+      return h('li', { class: done ? 'done' : '' }, h('span', { class: 'box', 'aria-hidden': 'true' }, done ? '' : i + 1), h('span', { class: 't' }, t.text, done ? h('span', { class: 'sr-only' }, ' (done)') : null));
+    }));
+  }
+  function drawTable() {
+    const rows = TASKS.map(t => {
+      const inp = h('input', { type: 'text', inputmode: 'decimal', 'aria-label': `Predicted ${t.q} in ${t.unit}`, value: st.pred[t.k] ?? '' });
+      inp.addEventListener('change', () => { st.pred[t.k] = inp.value; drawTable(); });
+      const p = parseFloat(String(st.pred[t.k] ?? '').replace(',', '.')), m = st.data[t.k];
+      const diff = isFinite(p) && p !== 0 && m != null ? ((m - p) / p * 100) : null;
+      return h('tr', {}, h('td', {}, t.q), h('td', { class: 'num' }, inp), h('td', { class: 'num' }, m != null ? String(m) : '—'), h('td', {}, t.unit), h('td', { class: 'num' }, diff == null ? '—' : (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%'));
+    });
+    $('#table tbody').replaceChildren(...rows);
+    const all = TASKS.every(t => st.data[t.k] != null);
+    const box = $('#errors');
+    if (!all) { box.replaceChildren(); return; }
+    if (box.dataset.built) return;
+    box.dataset.built = '1';
+    const SRC = ['Resistor tolerance (real resistors are within ±5% of their label)', 'The battery is not exactly 9.0 V', 'The meter shows only 3 digits (resolution)', 'Poor probe contact', 'The meter itself slightly changes the circuit'];
+    const checks = SRC.map(s => h('label', {}, h('input', { type: 'checkbox' }), s));
+    const out = h('div');
+    box.append(h('h3', {}, 'Why don’t measured and predicted values match exactly?'), h('p', { class: 'small muted', style: 'margin:0' }, 'Choose the error sources that could explain your differences.'),
+      h('div', { class: 'err-list' }, checks), h('button', { class: 'btn btn-small btn-primary', type: 'button', onclick: () => {
+        out.replaceChildren(feedback('info', 'This session’s actual parts', ` All of these can contribute. Here the parts were: R1 = ${PARTS.R1} Ω (${pct(PARTS.R1, NOM.R1)} from its label), R2 = ${PARTS.R2} Ω (${pct(PARTS.R2, NOM.R2)}), battery = ${PARTS.Vb.toFixed(2)} V. The meter also has a small internal resistance, which lowers current readings slightly. Differences of a few percent are normal; a big difference usually means a setup mistake.`));
+      } }, 'Show the actual parts'), out);
+  }
+  const pct = (a, b) => { const d = (a - b) / b * 100; return (d >= 0 ? '+' : '') + d.toFixed(1) + '%'; };
+  $('#csv').addEventListener('click', () => downloadCSV('multimeter-lab-data.csv', [['Quantity', 'Predicted', 'Measured', 'Unit', '% difference'],
+    ...TASKS.map(t => { const p = parseFloat(String(st.pred[t.k] ?? '')), m = st.data[t.k]; return [t.q, st.pred[t.k] ?? '', m ?? '', t.unit === 'Ω' ? 'ohm' : t.unit, isFinite(p) && p && m != null ? ((m - p) / p * 100).toFixed(1) : '']; })]));
+
+  /* ---------- update ---------- */
+  function update() {
+    fillSelects(); syncDial(); syncJack();
+    meas = measure();
+    drawBoard(); drawMeter(meas);
+    const box = $('#msg');
+    const items = [...(lastNote ? [lastNote] : []), ...meas.msgs];
+    lastNote = null;
+    box.replaceChildren(...items.map(m => feedback(m.kind, m.title, m.text)));
+    $('#record').disabled = !meas.task;
+    $('#record').textContent = meas.task ? `Record: ${TASKS.find(t => t.k === meas.task).q}` : 'Record reading';
+    $('#resetFuse').hidden = !st.fuse;
+    if (meas.display && !firstRun) announce(`Meter reads ${UI.spokenUnits(meas.display + ' ' + (meas.unit || ''))}.`);
+    firstRun = false;
+  }
+  let firstRun = true;
+  update(); drawTasks(); drawTable();
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> The meter&rsquo;s mode and its placement depend on what you are measuring. Voltmeters go in parallel, ammeters go in series, and resistance is measured with the power off.</p>
+    <p><strong>Time:</strong> about 3&ndash;5 minutes.</p>
+    <ul>
+      <li>Each visit picks slightly different &ldquo;real&rdquo; parts: resistors within &plusmn;5% of their labels, and a battery between 8.6 V and 9.4 V. Measurements then differ a little from predictions, which gives students real error sources to discuss.</li>
+      <li>Nominal predictions: I = 9 V &divide; 3.2 k&Omega; &asymp; 2.81 mA, V<sub>R1</sub> &asymp; 2.81 V, V<sub>R2</sub> &asymp; 6.19 V, R1 = 1.00 k&Omega;.</li>
+      <li>The wrong setups follow real physics. An ammeter placed across a single resistor here only bypasses that resistor (the reading changes, nothing is damaged). An ammeter across the battery, or across the switch and both resistors, is a near short circuit, and that is when the fuse blows. A voltmeter in series stops the circuit and reads about the full battery voltage.</li>
+      <li>The tool shows these setups to explain what goes wrong. They are not procedures to copy on real equipment.</li>
+      <li>Keyboard: every setting has a button or a menu, and the test points on the board are focusable (Enter places the selected probe).</li>
+      <li>Suggested tie-in: run this before the first real meter lab, then have students fill in the same table with real measurements.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>

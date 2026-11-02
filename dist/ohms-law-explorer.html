@@ -1,0 +1,1502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>
+/* ===== Electrical Circuits Interactives: shared styles ===== */
+:root {
+  color-scheme: light;
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #1b2330;
+  --ink-2: #4b5667;
+  --line: #d3d9e1;
+  --accent: #1f66c9;
+  --accent-hover: #1956ab;
+  --accent-ink: #ffffff;
+  --focus: #1f66c9;
+  --ok: #17703a;
+  --ok-bg: #e5f3ea;
+  --bad: #b3261e;
+  --bad-bg: #fbe8e6;
+  --warn: #7f4d00;
+  --warn-bg: #fff2d4;
+  --hl: #7b3fe4;            /* highlight (mapping, selection) */
+  --stage: #ffffff;         /* circuit canvas: always light, like a workbench sheet */
+  --stage-grid: #edf0f4;
+  --stage-ink: #1b2330;
+  --v-high: #d55e00;        /* warm = high potential */
+  --v-mid: #a69c92;
+  --v-low: #0072b2;         /* cool = low potential */
+  --wire-dead: #8c94a0;
+  --dot: #ffd21f;
+  --dot-edge: #3a2f00;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(20 30 50 / .06), 0 4px 14px rgb(20 30 50 / .06);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11151b;
+    --surface: #1a2029;
+    --surface-2: #222a35;
+    --ink: #e7ebf1;
+    --ink-2: #a8b2c1;
+    --line: #333e4c;
+    --accent: #5d9eff;
+    --accent-hover: #7fb2ff;
+    --accent-ink: #0a1322;
+    --focus: #7fb2ff;
+    --ok: #74d394;
+    --ok-bg: #16301f;
+    --bad: #ff8f86;
+    --bad-bg: #3a1c1a;
+    --warn: #ffc56b;
+    --warn-bg: #36290f;
+    --hl: #b892ff;
+    --stage: #f7f8fa;
+    --stage-grid: #e9ecf1;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 4px 14px rgb(0 0 0 / .25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11151b; --surface: #1a2029; --surface-2: #222a35; --ink: #e7ebf1; --ink-2: #a8b2c1;
+  --line: #333e4c; --accent: #5d9eff; --accent-hover: #7fb2ff; --accent-ink: #0a1322; --focus: #7fb2ff;
+  --ok: #74d394; --ok-bg: #16301f; --bad: #ff8f86; --bad-bg: #3a1c1a; --warn: #ffc56b; --warn-bg: #36290f;
+  --hl: #b892ff; --stage: #f7f8fa; --stage-grid: #e9ecf1;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font);
+}
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .4em; text-wrap: balance; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem); letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 .75em; }
+a { color: var(--accent); }
+button, input, select { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* ----- Page frame ----- */
+.app { max-width: 1240px; margin: 0 auto; padding: 16px 16px 48px; }
+.app-head { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: end; justify-content: space-between; margin: 8px 0 16px; }
+.app-head .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+.eyebrow { font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 4px; }
+.eyebrow a { color: inherit; text-decoration: none; }
+.eyebrow a:hover { text-decoration: underline; }
+.head-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 16px;
+}
+.panel + .panel { margin-top: 16px; }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.stack > * + * { margin-top: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--ink-2); }
+.small { font-size: .875rem; }
+
+/* ----- Stage (circuit canvas) ----- */
+.stage {
+  background: var(--stage);
+  background-image: radial-gradient(var(--stage-grid) 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px;
+  color: var(--stage-ink);
+  overflow: hidden;
+}
+.stage svg { display: block; width: 100%; height: auto; }
+.stage svg text { pointer-events: none; }
+.stage-title { font-weight: 600; font-size: .95rem; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* ----- Buttons ----- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+  font-weight: 600; cursor: pointer; text-decoration: none; line-height: 1.2;
+  transition: background-color .15s, border-color .15s;
+}
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn svg { width: 18px; height: 18px; flex: none; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.seg button { min-height: 40px; padding: 6px 14px; border: 0; background: transparent; font-weight: 600; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+
+/* ----- Caption bar ----- */
+.caption {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #10161f; color: #f3f6fa; border-radius: 10px; padding: 10px 14px; min-height: 48px;
+  font-size: 1.02rem;
+}
+.caption .cc { flex: none; font: 700 .7rem/1 var(--font); border: 1.5px solid currentColor; border-radius: 4px; padding: 3px 4px; margin-top: 3px; opacity: .8; }
+.caption-text { flex: 1; }
+.transcript { margin-top: 8px; }
+.transcript ol { margin: 6px 0 0; padding-left: 1.4em; color: var(--ink-2); font-size: .92rem; }
+
+/* ----- Feedback ----- */
+.fb {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+  border: 2px solid; font-size: .98rem;
+}
+.fb-icon { flex: none; width: 24px; height: 24px; }
+.fb strong { display: block; }
+.fb.ok { border-style: solid; border-color: var(--ok); background: var(--ok-bg); }
+.fb.ok strong { color: var(--ok); }
+.fb.bad { border-style: dashed; border-color: var(--bad); background: var(--bad-bg); }
+.fb.bad strong { color: var(--bad); }
+.fb.warn { border-style: double; border-width: 4px; border-color: var(--warn); background: var(--warn-bg); }
+.fb.warn strong { color: var(--warn); }
+.fb.info { border-style: solid; border-width: 1px; border-color: var(--line); background: var(--surface-2); }
+
+/* ----- Predict card ----- */
+.predict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+.predict fieldset { border: 0; margin: 0; padding: 0; }
+.predict legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
+.predict .choices { display: grid; gap: 6px; margin-bottom: 10px; }
+.choice {
+  display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer;
+}
+.choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.choice input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.predict.locked .choice { cursor: default; }
+.compare { display: grid; gap: 6px; grid-template-columns: auto 1fr; margin-top: 10px; font-size: .96rem; }
+.compare dt { font-weight: 700; }
+.compare dd { margin: 0; }
+.tag { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+
+/* ----- Legend ----- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .88rem; color: var(--ink-2); align-items: center; }
+.legend .item { display: inline-flex; gap: 6px; align-items: center; }
+.legend svg { width: 34px; height: 16px; flex: none; }
+.vbar { width: 70px; height: 10px; border-radius: 4px; background: linear-gradient(90deg, var(--v-low), var(--v-mid), var(--v-high)); display: inline-block; }
+
+/* ----- Sliders (native range, styled) ----- */
+.field { display: grid; gap: 4px; }
+.field label, .field .label { font-weight: 600; font-size: .95rem; display: flex; justify-content: space-between; gap: 8px; }
+.field output, .field .val { font-family: var(--mono); font-weight: 600; }
+.field-row { display: flex; gap: 10px; align-items: center; }
+.field-row input[type="number"] { width: 6.5em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+input[type="range"] {
+  --slider-track-size: 8px; --slider-thumb-size: 22px; --slider-progress: 50%;
+  --slider-track-color: var(--line); --slider-fill-color: var(--accent);
+  appearance: none; -webkit-appearance: none; inline-size: 100%; block-size: 40px; margin: 0; padding: 0;
+  border: 0; background: transparent; cursor: pointer; flex: 1;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  block-size: var(--slider-track-size); border: 0; border-radius: 999px;
+  background: linear-gradient(to right, var(--slider-fill-color) var(--slider-progress), var(--slider-track-color) var(--slider-progress));
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  border: 3px solid var(--surface); border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]::-moz-range-track { block-size: var(--slider-track-size); border: 0; border-radius: 999px; background: var(--slider-track-color); }
+input[type="range"]::-moz-range-progress { block-size: var(--slider-track-size); border-radius: 999px; background: var(--slider-fill-color); }
+input[type="range"]::-moz-range-thumb {
+  inline-size: var(--slider-thumb-size); block-size: var(--slider-thumb-size); border: 3px solid var(--surface);
+  border-radius: 50%; background: var(--slider-fill-color); box-shadow: 0 0 0 1px var(--ink-2);
+}
+input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+
+/* ----- Tables ----- */
+.table-wrap { overflow-x: auto; }
+table.data { border-collapse: collapse; width: 100%; font-size: .94rem; }
+table.data th, table.data td { border-bottom: 1px solid var(--line); padding: 7px 8px; text-align: left; vertical-align: middle; }
+table.data th { font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+table.data td.num, table.data th.num { text-align: right; font-family: var(--mono); }
+table.data input { width: 6em; min-height: 36px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; font-family: var(--mono); }
+
+/* ----- Teacher panel ----- */
+details.about { margin-top: 20px; }
+details.about > summary {
+  cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; gap: 8px;
+  list-style: none; padding: 0 4px;
+}
+details.about > summary::-webkit-details-marker { display: none; }
+details.about > summary::before { content: "+"; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--line); font-weight: 700; }
+details.about[open] > summary::before { content: "\2212"; }
+details.about .about-body { padding: 4px 4px 0 36px; color: var(--ink-2); }
+details.about .about-body ul { padding-left: 1.2em; margin: 0 0 .75em; }
+
+.app-foot { margin-top: 28px; font-size: .85rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
+
+/* ----- SVG circuit parts (shared) ----- */
+.sym { fill: none; stroke: var(--stage-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sym-fill { fill: var(--stage-ink); stroke: none; }
+.wire { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.lbl { font: 700 13px var(--font); fill: var(--stage-ink); }
+.lbl-sm { font: 600 11px var(--font); fill: #4b5667; }
+.lbl-val { font: 600 12px var(--mono); fill: #4b5667; }
+.vtag rect { fill: #ffffff; stroke: #c9d0da; }
+.vtag text { font: 700 11.5px var(--mono); fill: #1b2330; }
+.dot { fill: var(--dot); stroke: var(--dot-edge); stroke-width: 1.2; }
+.arrowhead { fill: #1b2330; }
+.part-hit { fill: transparent; stroke: none; }
+.focusable { cursor: pointer; outline: none; }
+.focusable:focus-visible .focus-ring, .focusable.is-hl .focus-ring { stroke: var(--hl); stroke-width: 3.5; stroke-dasharray: 7 4; fill: rgb(123 63 228 / .08); }
+.focus-ring { fill: none; stroke: transparent; }
+.open-mark { fill: none; stroke: #b3261e; stroke-width: 2.4; stroke-dasharray: 5 4; }
+.open-label rect { fill: #fff; stroke: #b3261e; stroke-width: 1.6; }
+.open-label text { font: 800 11px var(--font); fill: #b3261e; letter-spacing: .05em; }
+.hatch-dead { stroke-dasharray: 2 6; }
+
+@media (max-width: 600px) {
+  .app { padding: 12px 16px 40px; }
+  .panel { padding: 12px; }
+}
+@media print {
+  .head-tools, .caption, .btn { display: none !important; }
+  .panel { box-shadow: none; }
+}
+
+</style>
+<title>Ohm's Law Explorer</title>
+<meta name="description" content="Adjust a bench power supply and a resistor, collect voltage and current data, and find the relationship between them on a graph.">
+<style>
+  .layout > * { min-width: 0; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .psu { background: #2d3239; border-radius: 12px; padding: 12px; color: #e9edf2; }
+  .psu svg { display: block; width: 100%; height: auto; }
+  .controls { display: grid; gap: 12px; margin-top: 14px; }
+  .readouts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .readout { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); }
+  .readout .k { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); font-weight: 700; }
+  .readout .v { font: 700 1.2rem var(--mono); }
+  .graph-wrap { background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+  .graph-wrap svg { display: block; width: 100%; height: auto; }
+  .axis text { font: 600 12px var(--font); fill: #4b5667; }
+  .axis .title { font: 700 13px var(--font); fill: #1b2330; }
+  .gridline { stroke: #e6e9ee; }
+  .steps { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; }
+  .steps li { display: flex; gap: 10px; align-items: flex-start; }
+  .steps .box { flex: none; width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-size: .8rem; font-weight: 800; margin-top: 1px; }
+  .steps li.done .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .steps li.done .box::before { content: "\2713"; }
+  .steps li.done .txt { color: var(--ink-2); }
+  .practice { display: grid; gap: 12px; }
+  .problem { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface-2); }
+  .problem .ans { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .problem input { width: 7em; min-height: 40px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); background: var(--surface); }
+  .series-key { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .9rem; margin-top: 8px; }
+  .series-key span { display: inline-flex; gap: 6px; align-items: center; }
+  .series-key svg { width: 16px; height: 16px; }
+  .warn-slot:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="app-head">
+    <div>
+      <div class="eyebrow"><a href="index.html">Electrical Circuits Interactives</a></div>
+      <h1>Ohm&rsquo;s Law Explorer</h1>
+      <p class="lede">Set the power supply and choose a resistor. Add data points to the graph, then find what the slope of the line tells you.</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-psu">
+        <h2 id="h-psu">Bench power supply</h2>
+        <div class="psu" id="psu"></div>
+        <div class="controls" id="controls"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-circ">
+        <h2 id="h-circ">Circuit</h2>
+        <div class="stage" id="stage"></div>
+        <div class="readouts" id="readouts"></div>
+        <div class="warn-slot" id="warn" style="margin-top:10px"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn btn-primary" id="add" type="button">Add point to graph</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-steps">
+        <h2 id="h-steps">Steps</h2>
+        <ol class="steps" id="steps"></ol>
+        <div id="predict" style="margin-top:12px"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-graph">
+        <div class="stage-title"><h2 id="h-graph" style="margin:0">Voltage vs. current</h2>
+          <label class="row small" style="gap:6px;font-weight:600"><input type="checkbox" id="fit" style="width:18px;height:18px;accent-color:var(--accent)"> Show line of best fit</label></div>
+        <div class="graph-wrap" id="graph"></div>
+        <div class="series-key" id="key"></div>
+        <p class="small muted" id="graphSummary" aria-live="polite" style="margin-top:8px"></p>
+        <div id="slopeQ"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-data">
+        <div class="stage-title"><h2 id="h-data" style="margin:0">Data table</h2>
+          <span class="row"><button class="btn btn-small" id="csv" type="button">Download CSV</button><button class="btn btn-small" id="clear" type="button">Clear data</button></span></div>
+        <div class="table-wrap"><table class="data" id="table">
+          <caption class="sr-only">Collected data points</caption>
+          <thead><tr><th>Set</th><th class="num">Resistor (&Omega;)</th><th class="num">Voltage (V)</th><th class="num">Current (mA)</th><th class="num">V &divide; I (&Omega;)</th></tr></thead>
+          <tbody></tbody></table></div>
+      </section>
+      <section class="panel" aria-labelledby="h-prac">
+        <h2 id="h-prac">Practice: find the missing value</h2>
+        <div class="practice" id="practice"></div>
+      </section>
+    </div>
+  </main>
+  <div id="about"></div>
+  <footer class="app-foot">
+  <span>Part of <a href="index.html">Electrical Circuits Interactives</a>. Current is shown as conventional current (+ to &minus;).</span>
+  <span>Works offline. No data leaves this page.</span>
+</footer>
+</div>
+<script>
+/* engine.js */
+/* ===== Circuit engine: DC nodal analysis (MNA) =====
+ * parts: array of
+ *   { id, type: 'resistor'|'lamp'|'wire'|'switch'|'ammeter'|'voltmeter', a, b, R?, closed? , removed? }
+ *   { id, type: 'vsource', pos, neg, V, Ilim? }     ideal source; optional current limit (CV/CC bench supply)
+ *   { id, type: 'led', a (anode), b (cathode), Vf?, Rs? }
+ * Result: { V:{node:volts}, I:{id:amps}, P:{id:watts}, mode:{id:'CV'|'CC'}, ok:true }
+ *   I for two-terminal parts = current flowing a -> b through the part.
+ *   I for a vsource = current leaving its + terminal into the circuit.
+ */
+(function (root) {
+  'use strict';
+  const R_WIRE = 1e-4;       // closed switch / wire
+  const R_AMMETER = 2;       // mA-range burden resistance
+  const R_VOLTMETER = 10e6;  // 10 MΩ input
+  const GMIN = 1e-12;
+
+  function lsolve(A, b) {
+    const n = b.length;
+    for (let c = 0; c < n; c++) {
+      let p = c, best = Math.abs(A[c][c]);
+      for (let r = c + 1; r < n; r++) { const v = Math.abs(A[r][c]); if (v > best) { best = v; p = r; } }
+      if (best < 1e-30) continue;
+      if (p !== c) { [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]]; }
+      for (let r = c + 1; r < n; r++) {
+        const f = A[r][c] / A[c][c];
+        if (!f) continue;
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+        b[r] -= f * b[c];
+      }
+    }
+    const x = new Array(n).fill(0);
+    for (let r = n - 1; r >= 0; r--) {
+      let s = b[r];
+      for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k];
+      x[r] = Math.abs(A[r][r]) < 1e-30 ? 0 : s / A[r][r];
+    }
+    return x;
+  }
+
+  function resistanceOf(p) {
+    switch (p.type) {
+      case 'wire': return R_WIRE;
+      case 'switch': return p.closed ? R_WIRE : null;
+      case 'ammeter': return p.R ?? R_AMMETER;
+      case 'voltmeter': return p.R ?? R_VOLTMETER;
+      case 'resistor': case 'lamp': return p.R;
+      default: return undefined;
+    }
+  }
+
+  function solve(parts, opts = {}) {
+    const active = parts.filter(p => !p.removed);
+    const sources = active.filter(p => p.type === 'vsource');
+    const ground = opts.ground || (sources[0] && sources[0].neg) || 'gnd';
+    const nodes = new Set();
+    for (const p of active) {
+      if (p.type === 'vsource') { nodes.add(p.pos); nodes.add(p.neg); }
+      else { nodes.add(p.a); nodes.add(p.b); }
+    }
+    nodes.delete(ground);
+    const names = [...nodes];
+    const idx = new Map(names.map((n, i) => [n, i]));
+    const N = names.length;
+
+    const ledState = new Map(active.filter(p => p.type === 'led').map(p => [p.id, false]));
+    const ccState = new Map(sources.map(s => [s.id, false]));
+    let result;
+
+    for (let iter = 0; iter < 25; iter++) {
+      const vs = sources.filter(s => !ccState.get(s.id));
+      const M = N + vs.length;
+      const A = Array.from({ length: M }, () => new Array(M).fill(0));
+      const z = new Array(M).fill(0);
+      const ix = n => (n === ground ? -1 : idx.get(n));
+      const stampG = (a, b, g) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) A[i][i] += g;
+        if (j >= 0) A[j][j] += g;
+        if (i >= 0 && j >= 0) { A[i][j] -= g; A[j][i] -= g; }
+      };
+      // current source of value I flowing from node a, through source, into node b (i.e. injected into b)
+      const stampI = (a, b, I) => {
+        const i = ix(a), j = ix(b);
+        if (i >= 0) z[i] -= I;
+        if (j >= 0) z[j] += I;
+      };
+      for (let k = 0; k < N; k++) A[k][k] += GMIN;
+
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          if (ledState.get(p.id)) { const g = 1 / Rs; stampG(p.a, p.b, g); stampI(p.b, p.a, g * Vf); }
+          else stampG(p.a, p.b, 1e-9);
+          continue;
+        }
+        const R = resistanceOf(p);
+        if (R == null) continue;
+        stampG(p.a, p.b, 1 / Math.max(R, 1e-9));
+      }
+      vs.forEach((s, k) => {
+        const r = N + k, i = ix(s.pos), j = ix(s.neg);
+        if (i >= 0) { A[i][r] += 1; A[r][i] += 1; }
+        if (j >= 0) { A[j][r] -= 1; A[r][j] -= 1; }
+        z[r] = s.V;
+      });
+      for (const s of sources) if (ccState.get(s.id)) stampI(s.neg, s.pos, s.Ilim);
+
+      const x = lsolve(A, z);
+      const V = { [ground]: 0 };
+      names.forEach((n, i) => { V[n] = x[i]; });
+      const I = {}, P = {}, mode = {};
+      for (const p of active) {
+        if (p.type === 'vsource') continue;
+        const vab = V[p.a] - V[p.b];
+        if (p.type === 'led') {
+          const Vf = p.Vf ?? 2.0, Rs = p.Rs ?? 15;
+          I[p.id] = ledState.get(p.id) ? (vab - Vf) / Rs : vab * 1e-9;
+        } else {
+          const R = resistanceOf(p);
+          I[p.id] = R == null ? 0 : vab / Math.max(R, 1e-9);
+        }
+        P[p.id] = vab * I[p.id];
+      }
+      vs.forEach((s, k) => { I[s.id] = -x[N + k]; mode[s.id] = 'CV'; });
+      for (const s of sources) if (ccState.get(s.id)) { I[s.id] = s.Ilim; mode[s.id] = 'CC'; }
+      for (const s of sources) P[s.id] = (V[s.pos] - V[s.neg]) * I[s.id];
+      result = { V, I, P, mode, ground, ok: true };
+
+      // update nonlinear states
+      let changed = false;
+      for (const p of active) {
+        if (p.type !== 'led') continue;
+        const on = ledState.get(p.id);
+        const vab = V[p.a] - V[p.b];
+        if (!on && vab > (p.Vf ?? 2.0) + 1e-6) { ledState.set(p.id, true); changed = true; }
+        else if (on && I[p.id] < 0) { ledState.set(p.id, false); changed = true; }
+      }
+      for (const s of sources) {
+        if (s.Ilim == null) continue;
+        const cc = ccState.get(s.id);
+        if (!cc && I[s.id] > s.Ilim + 1e-9) { ccState.set(s.id, true); changed = true; }
+        else if (cc && V[s.pos] - V[s.neg] > s.V + 1e-9) { ccState.set(s.id, false); changed = true; }
+      }
+      if (!changed) break;
+    }
+    return result;
+  }
+
+  const Engine = { solve, R_WIRE, R_AMMETER, R_VOLTMETER };
+  root.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* schem.js */
+/* ===== Schematic renderer: SVG symbols, wires, voltage colors ===== */
+(function (root) {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+
+  function el(tag, attrs = {}, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'text') e.textContent = v;
+      else if (k === 'class') e.setAttribute('class', v);
+      else e.setAttribute(k, v);
+    }
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  function svg(w, h, opts = {}) {
+    const s = el('svg', { viewBox: `0 0 ${w} ${h}`, role: opts.role || 'img', 'aria-labelledby': opts.labelledby, focusable: 'false' });
+    if (opts.title) { const t = el('title', { id: opts.titleId, text: opts.title }, s); }
+    if (opts.desc) el('desc', { id: opts.descId, text: opts.desc }, s);
+    return s;
+  }
+
+  /* ---- voltage color: low (cool) -> mid (neutral) -> high (warm) ---- */
+  const C_LOW = [0, 114, 178], C_MID = [166, 156, 146], C_HIGH = [213, 94, 0];
+  function mix(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+  function vColor(v, vmax) {
+    if (!(vmax > 0)) return '#8c94a0';
+    const t = Math.max(0, Math.min(1, v / vmax));
+    const c = t < 0.5 ? mix(C_LOW, C_MID, t / 0.5) : mix(C_MID, C_HIGH, (t - 0.5) / 0.5);
+    return `rgb(${c[0]} ${c[1]} ${c[2]})`;
+  }
+
+  /* ---- geometry helpers ---- */
+  function seg(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy);
+    return { L, ang: Math.atan2(dy, dx) * 180 / Math.PI, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
+  }
+  // group placed so local x-axis runs from (x1,y1) to (x2,y2)
+  function placed(parent, x1, y1, x2, y2, cls) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${x1} ${y1}) rotate(${s.ang})`, class: cls }, parent);
+    return { g, L: s.L };
+  }
+
+  function wire(parent, pts, color, opts = {}) {
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    return el('path', { d, class: 'wire' + (opts.cls ? ' ' + opts.cls : ''), stroke: color || '#8c94a0', 'stroke-width': opts.width }, parent);
+  }
+  function junction(parent, x, y, color) {
+    return el('circle', { cx: x, cy: y, r: 5, fill: color || '#1b2330' }, parent);
+  }
+  // leads drawn colored by node voltage, body in ink
+  function leads(g, L, body, ca, cb) {
+    const a = (L - body) / 2;
+    el('path', { d: `M0 0 H${a}`, class: 'wire', stroke: ca || '#8c94a0' }, g);
+    el('path', { d: `M${L - a} 0 H${L}`, class: 'wire', stroke: cb || ca || '#8c94a0' }, g);
+    return a;
+  }
+
+  /* ---- symbols (drawn between two terminal points) ---- */
+  function resistor(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 44, a = leads(g, L, body, o.ca, o.cb);
+    const n = 6, w = body / n, amp = 8;
+    let d = `M${a} 0`;
+    for (let i = 0; i < n; i++) d += ` L${a + w * (i + 0.5)} ${i % 2 ? amp : -amp}`;
+    d += ` L${a + body} 0`;
+    el('path', { d, class: 'sym' }, g);
+    return g;
+  }
+  // battery: (x1,y1) = negative terminal, (x2,y2) = positive terminal
+  function battery(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const cells = o.cells || 2, body = cells * 14 - 6, a = leads(g, L, body, o.cneg, o.cpos);
+    for (let i = 0; i < cells; i++) {
+      const x = a + i * 14;
+      el('path', { d: `M${x} -8 V8`, class: 'sym', 'stroke-width': 4.5 }, g);          // short plate (−)
+      el('path', { d: `M${x + 8} -17 V17`, class: 'sym' }, g);                           // long plate (+)
+    }
+    // + / − marks (kept upright)
+    const s = seg(x1, y1, x2, y2), rad = s.ang * Math.PI / 180;
+    const nx = -Math.sin(rad), ny = Math.cos(rad);
+    const off = o.markSide === 'left' ? -1 : 1;
+    const px = x1 + Math.cos(rad) * (a + body + 6) + nx * 24 * off, py = y1 + Math.sin(rad) * (a + body + 6) + ny * 24 * off;
+    const qx = x1 + Math.cos(rad) * (a - 6) + nx * 24 * off, qy = y1 + Math.sin(rad) * (a - 6) + ny * 24 * off;
+    el('text', { x: px, y: py + 5, class: 'lbl', 'text-anchor': 'middle', text: '+' }, parent);
+    el('text', { x: qx, y: qy + 5, class: 'lbl', 'text-anchor': 'middle', text: '−' }, parent);
+    return g;
+  }
+  function lamp(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 14, a = leads(g, L, 2 * r, o.ca, o.cb), cx = a + r;
+    const glow = el('g', { class: 'lamp-glow', opacity: o.lit ? 1 : 0 }, g);
+    el('circle', { cx, cy: 0, r: r + 5, fill: '#ffe680', opacity: .55 * (o.brightness ?? 1) + .15 }, glow);
+    for (let i = 0; i < 8; i++) {
+      const t = i * Math.PI / 4, r1 = r + 8, r2 = r + 15;
+      el('path', { d: `M${cx + Math.cos(t) * r1} ${Math.sin(t) * r1} L${cx + Math.cos(t) * r2} ${Math.sin(t) * r2}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, glow);
+    }
+    el('circle', { cx, cy: 0, r, class: 'sym', fill: o.lit ? '#fff3b0' : '#ffffff' }, g);
+    const k = r * 0.7071;
+    el('path', { d: `M${cx - k} ${-k} L${cx + k} ${k} M${cx - k} ${k} L${cx + k} ${-k}`, class: 'sym' }, g);
+    return g;
+  }
+  function led(parent, x1, y1, x2, y2, o = {}) {           // anode at (x1,y1)
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 26, a = leads(g, L, body, o.ca, o.cb);
+    if (o.lit) el('circle', { cx: a + 13, cy: 0, r: 22, fill: o.color || '#ff3b30', opacity: .22 }, g);
+    el('path', { d: `M${a} -12 L${a + 22} 0 L${a} 12 Z`, class: 'sym', fill: o.lit ? (o.color || '#ff3b30') : '#fff' }, g);
+    el('path', { d: `M${a + 22} -13 V13 M${a} 0 H${a + 26}`, class: 'sym' }, g);
+    for (const dx of [6, 15]) {
+      el('path', { d: `M${a + dx} -15 l9 -11 M${a + dx + 9} -26 l-6 1 M${a + dx + 9} -26 l-1 6`, class: 'sym', 'stroke-width': 1.8 }, g);
+    }
+    return g;
+  }
+  function sw(parent, x1, y1, x2, y2, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const body = 40, a = leads(g, L, body, o.ca, o.cb);
+    el('circle', { cx: a, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    el('circle', { cx: a + body, cy: 0, r: 4, class: 'sym', fill: '#fff' }, g);
+    const lever = el('path', { d: o.closed ? `M${a} 0 L${a + body - 3} -2` : `M${a} 0 L${a + body - 6} -20`, class: 'sym sw-lever' }, g);
+    if (o.flip) g.setAttribute('transform', g.getAttribute('transform') + ` scale(1 -1)`);
+    return g;
+  }
+  function meter(parent, x1, y1, x2, y2, letter, o = {}) {
+    const { g, L } = placed(parent, x1, y1, x2, y2, 'part');
+    const r = 15, a = leads(g, L, 2 * r, o.ca, o.cb);
+    el('circle', { cx: a + r, cy: 0, r, class: 'sym', fill: '#fff' }, g);
+    const s = seg(x1, y1, x2, y2);
+    const t = el('text', { x: a + r, y: 5, class: 'lbl', 'text-anchor': 'middle', 'font-size': 16, text: letter, transform: `rotate(${-s.ang} ${a + r} 0)` }, g);
+    return g;
+  }
+  function label(parent, x, y, text, o = {}) {
+    return el('text', { x, y, class: o.cls || 'lbl', 'text-anchor': o.anchor || 'middle', text }, parent);
+  }
+  function vtag(parent, x, y, text) {
+    const g = el('g', { class: 'vtag' }, parent);
+    const w = 8 + text.length * 7.2;
+    el('rect', { x: x - w / 2, y: y - 10, width: w, height: 20, rx: 5 }, g);
+    el('text', { x, y: y + 4.5, 'text-anchor': 'middle', text }, g);
+    return g;
+  }
+  function openMark(parent, x, y, o = {}) {
+    const g = el('g', { class: 'open-mark-g' }, parent);
+    el('circle', { cx: x, cy: y, r: o.r || 22, class: 'open-mark' }, g);
+    const lg = el('g', { class: 'open-label' }, g);
+    el('rect', { x: x - 24, y: y + (o.r || 22) + 4, width: 48, height: 18, rx: 4 }, lg);
+    el('text', { x, y: y + (o.r || 22) + 17, 'text-anchor': 'middle', text: 'OPEN' }, lg);
+    return g;
+  }
+  function arrowOnPath(parent, x1, y1, x2, y2, o = {}) {
+    const s = seg(x1, y1, x2, y2);
+    const g = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, parent);
+    el('path', { d: 'M-6 -6 L5 0 L-6 6 Z', class: 'arrowhead', fill: o.color }, g);
+    return g;
+  }
+  // focus ring rectangle sized to a group's bbox (call after the group is in the document)
+  function addFocusRing(g, pad = 8) {
+    const b = g.getBBox();
+    const r = el('rect', { x: b.x - pad, y: b.y - pad, width: b.width + 2 * pad, height: b.height + 2 * pad, rx: 8, class: 'focus-ring' });
+    g.insertBefore(r, g.firstChild);
+    return r;
+  }
+
+  /* ---- path utilities (polyline length + point at distance) ---- */
+  function polyline(pts) {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    const L = cum[cum.length - 1];
+    function at(s) {
+      s = Math.max(0, Math.min(L, s));
+      let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+      const t = (s - cum[i - 1]) / ((cum[i] - cum[i - 1]) || 1);
+      return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
+    }
+    return { pts, L, at };
+  }
+
+  const Schem = { el, svg, vColor, wire, junction, resistor, battery, lamp, led, sw, meter, label, vtag, openMark, arrowOnPath, addFocusRing, polyline, seg, NS };
+  root.Schem = Schem;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* dots.js */
+/* ===== Current-dot animator =====
+ * Conventional current. Every dot moves at the same speed in every tool.
+ * Each dot = the same amount of charge, so more current = dots closer together.
+ * spacing (px) = refSpacing * refCurrent / |I|
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem;
+
+  class DotFlow {
+    constructor(layer, opts = {}) {
+      this.layer = layer;
+      this.speed = opts.speed ?? 70;               // px per second, constant
+      this.refCurrent = opts.refCurrent ?? 0.01;   // A
+      this.refSpacing = opts.refSpacing ?? 70;     // px between dots at refCurrent
+      this.minSpacing = opts.minSpacing ?? 14;
+      this.r = opts.r ?? 4.2;
+      this.paths = [];
+      this.running = false;
+      this.motion = true;
+      this.last = 0;
+      this._tick = this._tick.bind(this);
+    }
+    spacingFor(I) {
+      const a = Math.abs(I);
+      if (a < 1e-7) return null;
+      return Math.max(this.minSpacing, this.refSpacing * this.refCurrent / a);
+    }
+    // pts listed in the direction of positive conventional current
+    add(id, pts, getI) {
+      const pl = S.polyline(pts);
+      const g = S.el('g', { 'data-flow': id, 'aria-hidden': 'true' }, this.layer);
+      const p = { id, pl, getI, g, phase: 0, spacing: this.refSpacing, dots: [], frozen: false };
+      this.paths.push(p);
+      this._layout(p);
+      return p;
+    }
+    clear() { this.paths.forEach(p => p.g.remove()); this.paths = []; }
+    _layout(p) {
+      const I = p.getI();
+      const sp = this.spacingFor(I);
+      p.frozen = sp == null;
+      if (sp != null) p.spacing = sp;
+      p.dir = I < 0 ? -1 : 1;
+      const n = Math.max(1, Math.floor(p.pl.L / p.spacing) + 2);
+      while (p.dots.length < n) p.dots.push(S.el('circle', { r: this.r, class: 'dot' }, p.g));
+      while (p.dots.length > n) p.dots.pop().remove();
+      this._place(p);
+    }
+    _place(p) {
+      const L = p.pl.L, sp = p.spacing;
+      const off = ((p.phase % sp) + sp) % sp;
+      p.dots.forEach((d, k) => {
+        let s = off + (k - 1) * sp;
+        if (p.dir < 0) s = L - s;
+        const vis = s >= 0 && s <= L;
+        const [x, y] = p.pl.at(s);
+        d.setAttribute('cx', x.toFixed(1)); d.setAttribute('cy', y.toFixed(1));
+        d.setAttribute('opacity', vis ? 1 : 0);
+      });
+    }
+    refresh() { this.paths.forEach(p => this._layout(p)); }
+    setMotion(on) { this.motion = on; if (on) this.start(); }
+    start() {
+      if (this.running) return;
+      this.running = true; this.last = performance.now();
+      requestAnimationFrame(this._tick);
+    }
+    stop() { this.running = false; }
+    _tick(now) {
+      if (!this.running) return;
+      const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+      if (this.motion) {
+        for (const p of this.paths) {
+          if (p.frozen || p.paused) continue;
+          p.phase += this.speed * dt;
+          this._place(p);
+        }
+      }
+      if (this.onTick) this.onTick(dt, this.motion);
+      requestAnimationFrame(this._tick);
+    }
+  }
+  root.DotFlow = DotFlow;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* bb.js */
+/* ===== Breadboard renderer (illustrated, photo-style, drawn upright) =====
+ * Numbered rows run down the board. In each row, holes a–e are connected, and f–j are connected.
+ * The two rail columns on each side run the full length (+ red, − blue).
+ */
+(function (root) {
+  'use strict';
+  const S = root.Schem, el = S.el;
+  const P = 18;
+  const COLX = { 'L+': 20, 'L-': 38, a: 80, b: 98, c: 116, d: 134, e: 152, f: 188, g: 206, h: 224, i: 242, j: 260, 'R-': 302, 'R+': 320 };
+  const LEFT = 'abcde', RIGHT = 'fghij';
+
+  class Breadboard {
+    constructor(parent, opts = {}) {
+      this.rows = opts.rows || 30;
+      this.ox = opts.x || 0; this.oy = opts.y || 0;
+      this.g = el('g', { class: 'bb', transform: `translate(${this.ox} ${this.oy})` }, parent);
+      this.width = 340; this.height = 34 + (this.rows - 1) * P + 24;
+      this.draw();
+    }
+    hole(row, col) { return [this.ox + COLX[col], this.oy + 34 + (row - 1) * P]; }
+    node(row, col) {
+      if (col.length === 2) return col;                 // rails: 'L+', 'L-', 'R+', 'R-'
+      return row + (LEFT.includes(col) ? 'L' : 'R');
+    }
+    stripHoles(row, side) { return (side === 'L' ? LEFT : RIGHT).split('').map(c => this.hole(row, c)); }
+    draw() {
+      const g = this.g, H = this.height;
+      el('rect', { x: 0, y: 0, width: this.width, height: H, rx: 10, fill: '#f4f2eb', stroke: '#d4cfbf', 'stroke-width': 1.5 }, g);
+      el('rect', { x: 2, y: 2, width: this.width - 4, height: 6, rx: 3, fill: '#ffffff', opacity: .6 }, g);
+      el('rect', { x: 164, y: 14, width: 12, height: H - 28, rx: 3, fill: '#e3dfd3' }, g);
+      // rail stripes
+      const y1 = 20, y2 = H - 14;
+      el('path', { d: `M11 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('path', { d: `M47 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M293 ${y1} V${y2}`, stroke: '#2a62c9', 'stroke-width': 2 }, g);
+      el('path', { d: `M329 ${y1} V${y2}`, stroke: '#d8342c', 'stroke-width': 2 }, g);
+      el('text', { x: 20, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', fill: '#d8342c', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      el('text', { x: 38, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 302, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '−' }, g).setAttribute('style', 'fill:#2a62c9;font-size:14px;font-weight:800');
+      el('text', { x: 320, y: 16, 'text-anchor': 'middle', class: 'lbl-sm', text: '+' }, g).setAttribute('style', 'fill:#c22a22;font-size:14px;font-weight:800');
+      for (const c of LEFT + RIGHT) el('text', { x: COLX[c], y: 20, 'text-anchor': 'middle', class: 'lbl-sm', text: c }, g);
+      const holes = el('g', { fill: '#3d3d3d' }, g);
+      for (let r = 1; r <= this.rows; r++) {
+        const y = 34 + (r - 1) * P;
+        if (r === 1 || r % 5 === 0) {
+          el('text', { x: 62, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+          el('text', { x: 280, y: y + 4, 'text-anchor': 'middle', class: 'lbl-sm', text: r }, g);
+        }
+        for (const c of LEFT + RIGHT) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+        if ((r - 1) % 6 !== 5) for (const c of ['L+', 'L-', 'R-', 'R+']) el('rect', { x: COLX[c] - 3.5, y: y - 3.5, width: 7, height: 7, rx: 1.5 }, holes);
+      }
+    }
+  }
+
+  /* ---- parts drawn on the board (coordinates are absolute points) ---- */
+  const BAND = { 0: '#1a1a1a', 1: '#7b4a1e', 2: '#d3221d', 3: '#f07c00', 4: '#f2c400', 5: '#2e9d3a', 6: '#2a5bd7', 7: '#8a3fd1', 8: '#8a8a8a', 9: '#f5f5f5' };
+  const BAND_NAME = ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'gray', 'white'];
+  function bands(ohms) {
+    let e = 0, v = ohms;
+    while (v >= 100) { v /= 10; e++; }
+    v = Math.round(v);
+    if (v < 10) { v *= 10; e--; }
+    const d1 = Math.floor(v / 10), d2 = v % 10;
+    return { colors: [BAND[d1], BAND[d2], BAND[e], '#c9a43a'], names: [BAND_NAME[d1], BAND_NAME[d2], BAND_NAME[e], 'gold'] };
+  }
+  function legLine(g, a, b, color = '#9aa1a8', w = 2.6) {
+    el('path', { d: `M${a[0]} ${a[1]} L${b[0]} ${b[1]}`, stroke: color, 'stroke-width': w, 'stroke-linecap': 'round', fill: 'none' }, g);
+  }
+  function pin(g, p) { el('rect', { x: p[0] - 3, y: p[1] - 3, width: 6, height: 6, rx: 1, fill: '#7d848c' }, g); }
+
+  function resistor(parent, p1, p2, ohms, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    legLine(g, p1, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -19, y: -6.5, width: 38, height: 13, rx: 6.5, fill: '#e4c895', stroke: '#b69563', 'stroke-width': 1 }, body);
+    el('rect', { x: -15, y: -5.5, width: 30, height: 3, rx: 1.5, fill: '#fff', opacity: .35 }, body);
+    const b = bands(ohms);
+    [-11, -5, 1, 11].forEach((x, i) => el('rect', { x, y: -6.5, width: 3.6, height: 13, fill: b.colors[i] }, body));
+    return g;
+  }
+  function wire(parent, pts, color = '#2e9d3a', o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    let d = '';
+    if (pts.length === 2 || o.straight) d = pts.map((p, i) => (i ? 'L' : 'M') + p[0] + ' ' + p[1]).join(' ');
+    else {
+      d = `M${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [px, py] = pts[i - 1], [cx, cy] = pts[i], [nx, ny] = pts[i + 1];
+        const r = 9;
+        const d1 = Math.hypot(cx - px, cy - py), d2 = Math.hypot(nx - cx, ny - cy);
+        const ax = cx + (px - cx) * Math.min(r, d1 / 2) / d1, ay = cy + (py - cy) * Math.min(r, d1 / 2) / d1;
+        const bx = cx + (nx - cx) * Math.min(r, d2 / 2) / d2, by = cy + (ny - cy) * Math.min(r, d2 / 2) / d2;
+        d += ` L${ax} ${ay} Q${cx} ${cy} ${bx} ${by}`;
+      }
+      const l = pts[pts.length - 1]; d += ` L${l[0]} ${l[1]}`;
+    }
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 7.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 5.5, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', class: 'bb-wire-core' }, g);
+    for (const p of [pts[0], pts[pts.length - 1]]) el('circle', { cx: p[0], cy: p[1], r: 3.4, fill: '#7d848c', stroke: 'rgb(0 0 0 / .3)' }, g);
+    return g;
+  }
+  // flexible lead (e.g. battery snap wires) as a smooth curve
+  function lead(parent, a, b, color, o = {}) {
+    const g = el('g', { class: 'bb-wire' }, parent);
+    const bend = o.bend ?? 40;
+    const d = `M${a[0]} ${a[1]} C${a[0]} ${a[1] + (o.down === false ? -bend : bend)} ${b[0] + (o.bx || 0)} ${b[1] + (o.by ?? -bend)} ${b[0]} ${b[1]}`;
+    el('path', { d, stroke: 'rgb(0 0 0 / .25)', 'stroke-width': 6.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('path', { d, stroke: color, 'stroke-width': 4.5, fill: 'none', 'stroke-linecap': 'round' }, g);
+    el('circle', { cx: b[0], cy: b[1], r: 3.4, fill: '#7d848c' }, g);
+    return g;
+  }
+  function led(parent, anode, cathode, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, anode); pin(g, cathode);
+    const color = o.color || '#e8261c';
+    const s = S.seg(anode[0], anode[1], cathode[0], cathode[1]);
+    legLine(g, anode, [s.mx, s.my]); legLine(g, cathode, [s.mx, s.my]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    if (o.lit) {
+      el('circle', { r: 26, fill: color, opacity: .18 }, body);
+      el('circle', { r: 18, fill: color, opacity: .25 }, body);
+    }
+    // dome seen from above, flat edge on the cathode side (+x)
+    el('path', { d: 'M8 -10.5 A12 12 0 1 0 8 10.5 Z', fill: color, stroke: 'rgb(0 0 0 / .35)', 'stroke-width': 1.2, opacity: o.lit ? 1 : .82 }, body);
+    el('circle', { cx: -3, cy: -3, r: 4, fill: '#fff', opacity: o.lit ? .8 : .45 }, body);
+    // long-leg marker near the anode
+    el('text', { x: anode[0] + (o.plusDx ?? -12), y: anode[1] + 4, class: 'lbl-sm', 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font-size:13px;font-weight:800;fill:#1b2330');
+    return g;
+  }
+  function bulb(parent, p1, p2, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pin(g, p1); pin(g, p2);
+    const s = S.seg(p1[0], p1[1], p2[0], p2[1]);
+    legLine(g, p1, [s.mx, s.my], '#6d737a', 3); legLine(g, p2, [s.mx, s.my], '#6d737a', 3);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my})` }, g);
+    if (o.lit) {
+      el('circle', { r: 30, fill: '#ffe066', opacity: .3 }, body);
+      for (let i = 0; i < 8; i++) { const t = i * Math.PI / 4; el('path', { d: `M${Math.cos(t) * 20} ${Math.sin(t) * 20} L${Math.cos(t) * 27} ${Math.sin(t) * 27}`, stroke: '#c98a00', 'stroke-width': 2.4, 'stroke-linecap': 'round' }, body); }
+    }
+    el('circle', { r: 14, fill: o.lit ? '#fff3a8' : '#eef3f7', stroke: '#8a96a3', 'stroke-width': 1.5, opacity: .95 }, body);
+    el('path', { d: 'M-6 3 Q-3 -6 0 3 Q3 -6 6 3', fill: 'none', stroke: o.lit ? '#e07b00' : '#7b6a55', 'stroke-width': 1.8 }, body);
+    el('circle', { cx: -5, cy: -6, r: 3, fill: '#fff', opacity: .7 }, body);
+    return g;
+  }
+  // slide switch over three holes in a line; pins[1] is common. on => common joined to pins[0]
+  function slideSwitch(parent, pins, on, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    pins.forEach(p => pin(g, p));
+    const [a, b, c] = pins, s = S.seg(a[0], a[1], c[0], c[1]);
+    const body = el('g', { transform: `translate(${s.mx} ${s.my}) rotate(${s.ang})` }, g);
+    el('rect', { x: -27, y: -11, width: 54, height: 22, rx: 4, fill: '#2b2f36', stroke: '#111', 'stroke-width': 1 }, body);
+    el('rect', { x: -19, y: -5, width: 38, height: 10, rx: 2, fill: '#15181c' }, body);
+    el('rect', { x: on ? -18 : 2, y: -6.5, width: 16, height: 13, rx: 2.5, fill: '#e6e8eb', stroke: '#9aa1a8', class: 'sw-knob' }, body);
+    return g;
+  }
+  function battery9v(parent, x, y, o = {}) {
+    const g = el('g', { class: 'bb-part' }, parent);
+    el('rect', { x: x + 6, y: y - 10, width: 14, height: 12, rx: 3, fill: '#c9ccd1', stroke: '#6d737a' }, g);   // + snap (small)
+    el('rect', { x: x + 34, y: y - 12, width: 18, height: 14, rx: 2, fill: '#c9ccd1', stroke: '#6d737a' }, g);  // − snap (hex)
+    el('rect', { x, y, width: 58, height: 92, rx: 6, fill: '#2b2f36', stroke: '#111' }, g);
+    el('rect', { x: x + 4, y: y + 30, width: 50, height: 30, rx: 3, fill: '#e3a21a' }, g);
+    el('text', { x: x + 29, y: y + 51, 'text-anchor': 'middle', text: o.label || '9V' }, g).setAttribute('style', 'font:800 17px system-ui,sans-serif;fill:#1b2330');
+    el('text', { x: x + 13, y: y + 20, 'text-anchor': 'middle', text: '+' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    el('text', { x: x + 43, y: y + 20, 'text-anchor': 'middle', text: '−' }, g).setAttribute('style', 'font:800 13px system-ui,sans-serif;fill:#fff');
+    return { g, pos: [x + 13, y - 10], neg: [x + 43, y - 12] };
+  }
+  function testPoint(parent, p, label, o = {}) {
+    const g = el('g', { class: 'tp' }, parent);
+    el('circle', { cx: p[0], cy: p[1], r: 7, fill: 'none', stroke: '#7b3fe4', 'stroke-width': 2 }, g);
+    const lx = p[0] + (o.dx ?? 16), ly = p[1] + (o.dy ?? 0);
+    const w = 10 + label.length * 7;
+    el('rect', { x: lx - (o.anchor === 'end' ? w : 0), y: ly - 9, width: w, height: 18, rx: 4, fill: '#fff', stroke: '#7b3fe4', 'stroke-width': 1.2 }, g);
+    el('text', { x: lx + (o.anchor === 'end' ? -w / 2 : w / 2), y: ly + 4, 'text-anchor': 'middle', text: label }, g).setAttribute('style', 'font:700 11px system-ui,sans-serif;fill:#5a2bb0');
+    return g;
+  }
+
+  root.BB = { Breadboard, resistor, wire, lead, led, bulb, slideSwitch, battery9v, testPoint, bands, P, COLX };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* ui.js */
+/* ===== UI kit: DOM helper, captions, predict-then-reveal, feedback, motion, sliders, CSV ===== */
+(function (root) {
+  'use strict';
+
+  function h(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k === 'html') e.innerHTML = v;
+      else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else if (v === true) e.setAttribute(k, '');
+      else e.setAttribute(k, v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+    return e;
+  }
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* ---- number formatting ---- */
+  function sig(x, n = 3) {
+    if (!isFinite(x)) return '—';
+    if (Math.abs(x) < 1e-12) return '0';
+    x = Number(x.toPrecision(n));
+    const d = Math.max(0, n - 1 - Math.floor(Math.log10(Math.abs(x))));
+    return x.toFixed(Math.min(d, 6));
+  }
+  function fmtV(v, n = 3) { return sig(v, n) + ' V'; }
+  function fmtI(a, n = 3) { if (Math.abs(a) < 1e-7) return '0 mA'; return Math.abs(a) < 1 ? sig(a * 1000, n) + ' mA' : sig(a, n) + ' A'; }
+  function fmtR(r, n = 3) { return r >= 1000 ? sig(r / 1000, n) + ' kΩ' : sig(r, n) + ' Ω'; }
+  function spokenUnits(s) {
+    return s.replace(/kΩ/g, ' kilohms').replace(/Ω/g, ' ohms').replace(/\bmA\b/g, 'milliamps').replace(/\bV\b/g, 'volts').replace(/\bW\b/g, 'watts').replace(/−/g, 'minus ');
+  }
+
+  /* ---- live announcer (polite + assertive) ---- */
+  let politeEl, assertEl;
+  function ensureAnnouncer() {
+    if (politeEl) return;
+    politeEl = h('div', { class: 'sr-only', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    assertEl = h('div', { class: 'sr-only', 'aria-live': 'assertive', 'aria-atomic': 'true' });
+    document.body.append(politeEl, assertEl);
+  }
+  function announce(text, assertive = false) {
+    ensureAnnouncer();
+    const t = assertive ? assertEl : politeEl;
+    t.textContent = '';
+    setTimeout(() => { t.textContent = text; }, 30);
+  }
+
+  /* ---- captions with transcript ---- */
+  class Captioner {
+    constructor(mount, opts = {}) {
+      this.lines = [];
+      this.textEl = h('div', { class: 'caption-text', 'aria-live': 'polite', 'aria-atomic': 'true' }, opts.initial || '');
+      this.el = h('div', { class: 'caption', role: 'region', 'aria-label': 'Captions' }, h('span', { class: 'cc', 'aria-hidden': 'true' }, 'CC'), this.textEl);
+      this.list = h('ol');
+      this.details = h('details', { class: 'transcript' }, h('summary', { class: 'small' }, 'Show transcript'), this.list);
+      mount.append(this.el, this.details);
+      if (opts.initial) this.log(opts.initial);
+    }
+    set(text) {
+      if (this.textEl.textContent === text) return;
+      this.textEl.textContent = text;
+      this.log(text);
+    }
+    log(text) {
+      if (this.lines[this.lines.length - 1] === text) return;
+      this.lines.push(text);
+      this.list.append(h('li', {}, text));
+    }
+    clear() { this.lines = []; this.list.textContent = ''; }
+  }
+
+  /* ---- feedback badge ---- */
+  const ICONS = {
+    ok: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bad: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>',
+    warn: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2L23 21H1z" fill="currentColor"/><path d="M12 9v5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.5" fill="#fff"/></svg>',
+    info: '<svg class="fb-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M12 11v6" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="7.3" r="1.6" fill="#fff"/></svg>'
+  };
+  const FB_WORD = { ok: 'Correct', bad: 'Not quite', warn: 'Safety check', info: 'Note' };
+  function feedback(kind, title, text) {
+    const color = { ok: 'var(--ok)', bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--ink-2)' }[kind];
+    const icon = h('span', { html: ICONS[kind], style: `color:${color};display:inline-flex` });
+    return h('div', { class: 'fb ' + kind, role: kind === 'warn' || kind === 'bad' ? 'alert' : 'status' },
+      icon, h('div', {}, h('strong', {}, title || FB_WORD[kind]), text ? h('span', {}, text) : null));
+  }
+
+  /* ---- predict, then reveal ---- */
+  let predictCount = 0;
+  class Predict {
+    constructor(mount, { question, choices, onLock, lockLabel }) {
+      this.choices = choices;
+      const name = 'predict-' + (++predictCount);
+      this.radios = choices.map((c, i) => h('input', { type: 'radio', name, value: i }));
+      this.lockBtn = h('button', { class: 'btn btn-primary', type: 'button', disabled: true }, lockLabel || 'Lock in prediction');
+      this.result = h('div', { class: 'predict-result' });
+      this.fs = h('fieldset', {}, h('legend', {}, question),
+        h('div', { class: 'choices' }, choices.map((c, i) => h('label', { class: 'choice' }, this.radios[i], h('span', {}, c)))));
+      this.el = h('div', { class: 'predict' }, this.fs, h('div', { class: 'row' }, this.lockBtn), this.result);
+      this.radios.forEach(r => r.addEventListener('change', () => { this.lockBtn.disabled = false; }));
+      this.lockBtn.addEventListener('click', () => {
+        const sel = this.radios.findIndex(r => r.checked);
+        if (sel < 0) return;
+        this.locked = sel;
+        this.radios.forEach(r => { r.disabled = true; });
+        this.el.classList.add('locked');
+        this.lockBtn.hidden = true;
+        this.result.replaceChildren(h('p', { class: 'small muted', style: 'margin:8px 0 0' }, 'Prediction locked: “' + choices[sel] + '”'));
+        announce('Prediction locked: ' + choices[sel]);
+        onLock && onLock(sel);
+      });
+      mount.append(this.el);
+    }
+    reveal(actualIndex, explanation) {
+      const p = this.locked;
+      const match = p === actualIndex;
+      this.result.replaceChildren(h('dl', { class: 'compare' },
+        h('dt', {}, 'You predicted'), h('dd', {}, p == null ? '(no prediction)' : this.choices[p]),
+        h('dt', {}, 'What happened'), h('dd', {}, this.choices[actualIndex]),
+      ), h('p', { class: 'small', style: 'margin:8px 0 0' },
+        h('span', { class: 'tag' }, match ? 'Matches your prediction' : 'Different from your prediction'), ' ', explanation || ''));
+      announce('You predicted ' + (p == null ? 'nothing' : this.choices[p]) + '. What happened: ' + this.choices[actualIndex] + '. ' + (explanation || ''));
+    }
+    reset() {
+      this.locked = undefined;
+      this.radios.forEach(r => { r.disabled = false; r.checked = false; });
+      this.el.classList.remove('locked');
+      this.lockBtn.hidden = false; this.lockBtn.disabled = true;
+      this.result.replaceChildren();
+    }
+  }
+
+  /* ---- motion preference + pause toggle ---- */
+  const mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false, addEventListener() {} };
+  const motion = {
+    reduced: mq.matches,
+    on: !mq.matches,
+    listeners: [],
+    set(v) { this.on = v; this.listeners.forEach(f => f(v)); },
+    onChange(f) { this.listeners.push(f); f(this.on); },
+    button() {
+      const b = h('button', { class: 'btn btn-small', type: 'button', 'aria-pressed': String(!this.on) });
+      const sync = v => { b.setAttribute('aria-pressed', String(!v)); b.textContent = v ? 'Pause motion' : 'Play motion'; };
+      b.addEventListener('click', () => this.set(!this.on));
+      this.onChange(sync);
+      return b;
+    }
+  };
+  mq.addEventListener && mq.addEventListener('change', e => { motion.reduced = e.matches; motion.set(!e.matches); });
+
+  /* ---- slider with linked number box ---- */
+  function syncSlider(input) {
+    const min = +input.min || 0, max = +input.max || 100;
+    input.style.setProperty('--slider-progress', ((+input.value - min) / (max - min) * 100) + '%');
+  }
+  function slider({ id, label, min, max, step, value, unit, format, onInput, values }) {
+    // values: optional discrete list (slider indexes into it)
+    const discrete = Array.isArray(values);
+    const input = h('input', { type: 'range', id, min: discrete ? 0 : min, max: discrete ? values.length - 1 : max, step: discrete ? 1 : step, value: discrete ? Math.max(0, values.indexOf(value)) : value });
+    const out = h('output', { for: id, class: 'val' });
+    const get = () => discrete ? values[+input.value] : +input.value;
+    const fmt = format || (v => v + (unit ? ' ' + unit : ''));
+    const update = (fire = true) => {
+      const v = get();
+      out.textContent = fmt(v);
+      input.setAttribute('aria-valuetext', spokenUnits(fmt(v)));
+      syncSlider(input);
+      if (fire && onInput) onInput(v);
+    };
+    input.addEventListener('input', () => update());
+    const wrap = h('div', { class: 'field' }, h('label', { for: id }, h('span', {}, label), out), input);
+    update(false);
+    return { el: wrap, input, get, set(v) { input.value = discrete ? Math.max(0, values.indexOf(v)) : v; update(false); }, update };
+  }
+
+  /* ---- teacher panel ---- */
+  function about(mount, html) {
+    const d = h('details', { class: 'about' }, h('summary', {}, 'About this tool'), h('div', { class: 'about-body', html }));
+    mount.append(d);
+    return d;
+  }
+
+  /* ---- CSV download ---- */
+  function downloadCSV(filename, rows) {
+    const esc = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = rows.map(r => r.map(esc).join(',')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = h('a', { href: URL.createObjectURL(blob), download: filename });
+    document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ---- SVG focusable part helper: keyboard + pointer activation ---- */
+  function makeFocusable(g, { label, onActivate, onFocus, onBlur, role }) {
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', role || 'button');
+    g.setAttribute('aria-label', label);
+    g.classList.add('focusable');
+    if (onActivate) {
+      g.addEventListener('click', e => onActivate(e));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(e); } });
+    }
+    if (onFocus) { g.addEventListener('focus', onFocus); g.addEventListener('pointerenter', onFocus); }
+    if (onBlur) { g.addEventListener('blur', onBlur); g.addEventListener('pointerleave', onBlur); }
+    return g;
+  }
+
+  /* ---- shuffle ---- */
+  function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  root.UI = { h, $, $$, sig, fmtV, fmtI, fmtR, spokenUnits, announce, Captioner, feedback, Predict, motion, slider, syncSlider, about, downloadCSV, makeFocusable, shuffle };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(() => {
+  const { h, $, sig, slider, Predict, feedback, about, announce, downloadCSV, fmtR } = UI;
+  const S = Schem;
+  const RES = [100, 220, 330, 470, 680, 1000];
+  const RATING = 0.25;   // W
+  const st = { Vset: 3, Ilim: 0.2, R: 330, points: [], fit: false, predLocked: false, revealed: false, steepAnswered: false };
+  let op;   // operating point
+
+  function solve() {
+    const r = Engine.solve([{ id: 'PS', type: 'vsource', pos: 'p', neg: 'g', V: st.Vset, Ilim: st.Ilim }, { id: 'R', type: 'resistor', a: 'p', b: 'g', R: st.R }]);
+    op = { V: r.V.p, I: r.I.R, P: r.P.R, mode: r.mode.PS };
+  }
+
+  /* ---------- bench supply illustration ---------- */
+  const psu = S.svg(380, 150, { role: 'img' });
+  $('#psu').append(psu);
+  function drawPSU() {
+    psu.replaceChildren();
+    const E = (t, a, p = psu) => S.el(t, a, p);
+    E('rect', { x: 0, y: 0, width: 380, height: 150, rx: 10, fill: '#3a4049' });
+    const disp = (x, label, val, unit) => {
+      E('rect', { x, y: 14, width: 120, height: 54, rx: 6, fill: '#0f1a12', stroke: '#1d2b20' });
+      E('text', { x: x + 112, y: 52, 'text-anchor': 'end', text: val, style: 'font:700 26px ui-monospace,Menlo,Consolas,monospace;fill:#7dff9b' });
+      E('text', { x: x + 112, y: 64, 'text-anchor': 'end', text: unit, style: 'font:700 9px system-ui,sans-serif;fill:#7dff9b;opacity:.8' });
+      E('text', { x: x + 60, y: 84, 'text-anchor': 'middle', text: label, style: 'font:700 10px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.08em' });
+    };
+    disp(14, 'VOLTAGE', op.V.toFixed(2), 'V');
+    disp(146, 'CURRENT', op.I.toFixed(3), 'A');
+    const knob = (cx, frac, label) => {
+      E('circle', { cx, cy: 118, r: 19, fill: '#1e2227', stroke: '#111' });
+      E('circle', { cx, cy: 118, r: 14, fill: '#4a515b' });
+      const a = (-135 + 270 * frac) * Math.PI / 180;
+      E('path', { d: `M${cx} 118 L${cx + Math.sin(a) * 13} ${118 - Math.cos(a) * 13}`, stroke: '#fff', 'stroke-width': 3, 'stroke-linecap': 'round' });
+      E('text', { x: cx + 26, y: 122, text: label, style: 'font:700 9.5px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.06em' });
+    };
+    knob(36, st.Vset / 12, 'VOLTAGE');
+    knob(168, (st.Ilim - 0.01) / 0.49, 'CURRENT');
+    // CV / CC lamps
+    const lamp = (y, on, color, label) => {
+      if (on) E('circle', { cx: 290, cy: y, r: 10, fill: color, opacity: .3 });
+      E('circle', { cx: 290, cy: y, r: 6, fill: on ? color : '#222', stroke: '#111' });
+      E('text', { x: 302, y: y + 4, text: label + (on ? ' ON' : ''), style: `font:700 10px system-ui,sans-serif;fill:${on ? '#fff' : '#9aa3ad'}` });
+    };
+    lamp(30, op.mode === 'CV', '#43d36b', 'CV');
+    lamp(54, op.mode === 'CC', '#ff5a4f', 'CC');
+    // output terminals
+    E('text', { x: 316, y: 98, 'text-anchor': 'middle', text: 'OUTPUT', style: 'font:700 9.5px system-ui,sans-serif;fill:#c9d0d9;letter-spacing:.08em' });
+    E('circle', { cx: 296, cy: 120, r: 11, fill: '#d63b32', stroke: '#7a1b16', 'stroke-width': 2 });
+    E('circle', { cx: 336, cy: 120, r: 11, fill: '#1f2328', stroke: '#000', 'stroke-width': 2 });
+    E('text', { x: 296, y: 125, 'text-anchor': 'middle', text: '+', style: 'font:800 14px system-ui;fill:#fff' });
+    E('text', { x: 336, y: 125, 'text-anchor': 'middle', text: '−', style: 'font:800 14px system-ui;fill:#fff' });
+    psu.setAttribute('aria-label', `Bench power supply. Output ${op.V.toFixed(2)} volts, ${(op.I * 1000).toFixed(1)} milliamps. Mode: ${op.mode === 'CC' ? 'constant current (current limit reached)' : 'constant voltage'}.`);
+  }
+
+  /* ---------- circuit schematic ---------- */
+  const circ = S.svg(420, 230, { role: 'img' });
+  $('#stage').append(circ);
+  function drawCircuit() {
+    circ.replaceChildren();
+    const VM = 12, cP = S.vColor(op.V, VM), cG = S.vColor(0, VM);
+    S.battery(circ, 60, 170, 60, 70, { cneg: cG, cpos: cP, markSide: 'left' });
+    S.label(circ, 96, 112, 'Power', { anchor: 'start', cls: 'lbl-sm' });
+    S.label(circ, 96, 126, 'supply', { anchor: 'start', cls: 'lbl-sm' });
+    S.wire(circ, [[60, 70], [60, 30], [120, 30]], cP);
+    S.meter(circ, 120, 30, 200, 30, 'A', { ca: cP, cb: cP });
+    S.wire(circ, [[200, 30], [260, 30], [260, 60]], cP);
+    const hot = op.P > RATING;
+    if (hot) S.el('ellipse', { cx: 260, cy: 120, rx: 26, ry: 48, fill: '#ff7a1a', opacity: .28 }, circ);
+    S.resistor(circ, 260, 60, 260, 180, { ca: cP, cb: cG });
+    S.label(circ, 232, 116, 'R', { anchor: 'end' });
+    S.label(circ, 232, 132, fmtR(st.R), { anchor: 'end', cls: 'lbl-val' });
+    S.wire(circ, [[260, 180], [260, 210], [60, 210], [60, 170]], cG);
+    // voltmeter across R
+    S.wire(circ, [[260, 50], [330, 50], [330, 80]], cP);
+    S.meter(circ, 330, 80, 330, 160, 'V', { ca: cP, cb: cG });
+    S.wire(circ, [[330, 160], [330, 195], [260, 195]], cG);
+    S.junction(circ, 260, 50, cP); S.junction(circ, 260, 195, cG);
+    S.vtag(circ, 160, 62, (op.I * 1000).toFixed(1) + ' mA');
+    S.vtag(circ, 384, 120, op.V.toFixed(2) + ' V');
+    circ.setAttribute('aria-label', `Circuit: the power supply, an ammeter, and a ${st.R} ohm resistor in series, with a voltmeter across the resistor. The ammeter reads ${(op.I * 1000).toFixed(1)} milliamps and the voltmeter reads ${op.V.toFixed(2)} volts.`);
+  }
+
+  /* ---------- readouts + warnings ---------- */
+  function drawReadouts() {
+    const ro = (k, v) => h('div', { class: 'readout' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
+    $('#readouts').replaceChildren(ro('Voltage across R', op.V.toFixed(2) + ' V'), ro('Current', (op.I * 1000).toFixed(1) + ' mA'), ro('Power in R', sig(op.P, 3) + ' W'));
+    const w = $('#warn'); w.replaceChildren();
+    if (op.P > RATING) w.append(feedback('warn', 'Over the ¼ W rating', ` The resistor is using ${sig(op.P, 2)} W. A real ¼ W resistor would get very hot and could burn out. Lower the voltage, use a larger resistor, or set the current limit lower.`));
+    if (op.mode === 'CC') w.append(feedback('info', 'Current limit reached (CC mode)', ` The supply lowered its voltage to ${op.V.toFixed(2)} V to keep the current at ${(st.Ilim * 1000).toFixed(0)} mA. Points you add now still follow V = I × R.`));
+  }
+
+  /* ---------- controls ---------- */
+  const sV = slider({ id: 'sV', label: 'Voltage knob', min: 0, max: 12, step: 0.5, value: st.Vset, format: v => v.toFixed(1) + ' V', onInput: v => { st.Vset = v; update(); } });
+  const sI = slider({ id: 'sI', label: 'Current limit knob', min: 0.01, max: 0.5, step: 0.01, value: st.Ilim, format: v => (v * 1000).toFixed(0) + ' mA', onInput: v => { st.Ilim = v; update(); } });
+  const sR = slider({ id: 'sR', label: 'Resistor', values: RES, value: st.R, format: v => fmtR(v), onInput: v => { st.R = v; update(); } });
+  $('#controls').append(sV.el, sI.el, sR.el, h('p', { class: 'small muted', style: 'margin:0' }, 'Resistors are rated ¼ W. Arrow keys work on every slider.'));
+
+  /* ---------- graph ---------- */
+  const COLORS = ['#1f66c9', '#d55e00', '#17803d', '#7b3fe4', '#b3261e', '#00798c'];
+  const G = { w: 560, h: 380, l: 64, r: 20, t: 20, b: 56 };
+  const gsvg = S.svg(G.w, G.h, { role: 'img' });
+  $('#graph').append(gsvg);
+  const seriesOf = () => { const m = []; st.points.forEach(p => { if (!m.includes(p.R)) m.push(p.R); }); return m; };
+  function niceMax(v) {
+    const steps = [5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 125, 150];
+    for (const s of steps) if (v <= s) return s;
+    return Math.ceil(v / 50) * 50;
+  }
+  function marker(parent, kind, x, y, color, hollow) {
+    const a = { fill: hollow ? '#fff' : color, stroke: color, 'stroke-width': 2 };
+    if (kind === 0) return S.el('circle', { cx: x, cy: y, r: 5.5, ...a }, parent);
+    if (kind === 1) return S.el('rect', { x: x - 5, y: y - 5, width: 10, height: 10, ...a }, parent);
+    if (kind === 2) return S.el('path', { d: `M${x} ${y - 6.5} L${x + 6} ${y + 4.5} L${x - 6} ${y + 4.5} Z`, ...a }, parent);
+    if (kind === 3) return S.el('path', { d: `M${x} ${y - 7} L${x + 7} ${y} L${x} ${y + 7} L${x - 7} ${y} Z`, ...a }, parent);
+    if (kind === 4) return S.el('path', { d: `M${x} ${y + 6.5} L${x + 6} ${y - 4.5} L${x - 6} ${y - 4.5} Z`, ...a }, parent);
+    return S.el('path', { d: `M${x - 6} ${y - 6} L${x + 6} ${y + 6} M${x + 6} ${y - 6} L${x - 6} ${y + 6}`, ...a, 'stroke-width': 3 }, parent);
+  }
+  function fitSlope(pts) {   // least squares through the origin: V = m * I
+    let sxy = 0, sxx = 0; pts.forEach(p => { sxy += p.I * p.V; sxx += p.I * p.I; });
+    return sxx > 0 ? sxy / sxx : NaN;
+  }
+  function drawGraph() {
+    gsvg.replaceChildren();
+    const ser = seriesOf();
+    const maxI = niceMax(Math.max(10, op.I * 1000, ...st.points.map(p => p.I * 1000)) * 1.02);
+    const X = i => G.l + (i / maxI) * (G.w - G.l - G.r), Y = v => G.h - G.b - (v / 12) * (G.h - G.t - G.b);
+    const ax = S.el('g', { class: 'axis' }, gsvg);
+    const nx = maxI <= 15 ? maxI / 5 : maxI / 5;
+    for (let k = 0; k <= 5; k++) {
+      const i = k * nx, x = X(i);
+      S.el('line', { x1: x, x2: x, y1: Y(0), y2: Y(12), class: 'gridline' }, ax);
+      S.el('text', { x, y: Y(0) + 18, 'text-anchor': 'middle', text: Number.isInteger(i) ? i : i.toFixed(1) }, ax);
+    }
+    for (let v = 0; v <= 12; v += 2) {
+      S.el('line', { x1: X(0), x2: X(maxI), y1: Y(v), y2: Y(v), class: 'gridline' }, ax);
+      S.el('text', { x: X(0) - 8, y: Y(v) + 4, 'text-anchor': 'end', text: v }, ax);
+    }
+    S.el('path', { d: `M${X(0)} ${Y(12)} V${Y(0)} H${X(maxI)}`, stroke: '#1b2330', 'stroke-width': 1.5, fill: 'none' }, ax);
+    S.el('text', { x: (X(0) + X(maxI)) / 2, y: G.h - 14, 'text-anchor': 'middle', class: 'title', text: 'Current, I (mA)' }, ax);
+    S.el('text', { x: 18, y: (Y(0) + Y(12)) / 2, 'text-anchor': 'middle', class: 'title', transform: `rotate(-90 18 ${(Y(0) + Y(12)) / 2})`, text: 'Voltage, V (V)' }, ax);
+    const clip = S.el('clipPath', { id: 'plotclip' }, gsvg);
+    S.el('rect', { x: X(0), y: Y(12), width: X(maxI) - X(0), height: Y(0) - Y(12) }, clip);
+    // fit lines
+    if (st.fit) ser.forEach((R, k) => {
+      const pts = st.points.filter(p => p.R === R);
+      if (pts.length < 2) return;
+      const m = fitSlope(pts);    // V per A
+      const iEnd = Math.min(maxI / 1000, 12 / m);
+      S.el('line', { x1: X(0), y1: Y(0), x2: X(iEnd * 1000), y2: Y(m * iEnd), stroke: COLORS[k % 6], 'stroke-width': 2.5, 'stroke-dasharray': k % 2 ? '8 5' : null, 'clip-path': 'url(#plotclip)' }, gsvg);
+    });
+    // points
+    st.points.forEach(p => { const k = ser.indexOf(p.R); marker(gsvg, k % 6, X(p.I * 1000), Y(p.V), COLORS[k % 6], false); });
+    // live operating point (hollow)
+    marker(gsvg, 0, X(op.I * 1000), Y(op.V), '#1b2330', true).setAttribute('stroke-dasharray', '2 2');
+    // key
+    $('#key').replaceChildren(...ser.map((R, k) => {
+      const s = S.svg(16, 16); marker(s, k % 6, 8, 8, COLORS[k % 6], false);
+      const pts = st.points.filter(p => p.R === R);
+      const slope = st.fit && pts.length >= 2 ? ` — slope ${Math.round(fitSlope(pts))} Ω` : '';
+      return h('span', {}, s, `Set ${k + 1}: ${fmtR(R)}`, slope ? h('strong', {}, slope) : null);
+    }), h('span', {}, (() => { const s = S.svg(16, 16); marker(s, 0, 8, 8, '#1b2330', true); return s; })(), 'Current setting (not yet added)'));
+    // summary for screen readers and everyone
+    const parts = ser.map((R, k) => {
+      const pts = st.points.filter(p => p.R === R);
+      const m = fitSlope(pts);
+      return `Set ${k + 1} (${R} ohms): ${pts.length} point${pts.length === 1 ? '' : 's'}` + (pts.length >= 2 ? `, a straight line through zero with slope about ${Math.round(m)} ohms` : '');
+    });
+    const sum = parts.length ? parts.join('. ') + '.' : 'No points yet. The hollow marker shows the current setting.';
+    $('#graphSummary').textContent = sum;
+    gsvg.setAttribute('aria-label', 'Graph of voltage (vertical, volts) against current (horizontal, milliamps). ' + sum);
+  }
+
+  /* ---------- data table ---------- */
+  function drawTable() {
+    const ser = seriesOf();
+    $('#table tbody').replaceChildren(...st.points.map(p => h('tr', {},
+      h('td', {}, 'Set ' + (ser.indexOf(p.R) + 1)), h('td', { class: 'num' }, p.R), h('td', { class: 'num' }, p.V.toFixed(2)),
+      h('td', { class: 'num' }, (p.I * 1000).toFixed(2)), h('td', { class: 'num' }, p.I > 0 ? Math.round(p.V / p.I) : '—'))));
+    if (!st.points.length) $('#table tbody').append(h('tr', {}, h('td', { colspan: 5, class: 'muted' }, 'No data yet. Press “Add point to graph”.')));
+  }
+
+  /* ---------- steps ---------- */
+  const STEPS = [
+    'Make a prediction (below).',
+    'Add at least 4 points with the same resistor, using different voltages.',
+    'Turn on “Show line of best fit” and compare its slope with the resistor value.',
+    'Choose a different resistor and add at least 4 more points.',
+    'Answer: which line is steeper, and why?'
+  ];
+  function stepState() {
+    const ser = seriesOf();
+    const counts = ser.map(R => st.points.filter(p => p.R === R).length);
+    return [st.predLocked, counts[0] >= 4, st.fit && counts[0] >= 2, counts.filter(c => c >= 4).length >= 2, st.steepAnswered];
+  }
+  function drawSteps() {
+    const done = stepState();
+    $('#steps').replaceChildren(...STEPS.map((s, i) => h('li', { class: done[i] ? 'done' : '' }, h('span', { class: 'box', 'aria-hidden': 'true' }, done[i] ? '' : i + 1), h('span', { class: 'txt' }, s, h('span', { class: 'sr-only' }, done[i] ? ' (done)' : '')))));
+  }
+
+  const predict = new Predict($('#predict'), {
+    question: 'If you double the voltage across the same resistor, the current will…',
+    choices: ['double', 'be cut in half', 'stay the same'],
+    onLock: () => { st.predLocked = true; drawSteps(); maybeReveal(); }
+  });
+  function maybeReveal() {
+    if (st.revealed || !st.predLocked) return;
+    const R = seriesOf()[0];
+    const pts = st.points.filter(p => p.R === R && p.I > 0);
+    if (pts.length < 4) return;
+    st.revealed = true;
+    const a = pts.reduce((x, y) => (y.V < x.V ? y : x)), b = pts.reduce((x, y) => (y.V > x.V ? y : x));
+    predict.reveal(0, `In your data, going from ${a.V.toFixed(1)} V to ${b.V.toFixed(1)} V (×${(b.V / a.V).toFixed(1)}) changed the current from ${(a.I * 1000).toFixed(1)} mA to ${(b.I * 1000).toFixed(1)} mA (×${(b.I / a.I).toFixed(1)}). With the resistance fixed, current is proportional to voltage.`);
+  }
+
+  // steeper-line question
+  function drawSlopeQ() {
+    const box = $('#slopeQ');
+    const ser = seriesOf();
+    const ready = ser.filter(R => st.points.filter(p => p.R === R).length >= 2).length >= 2;
+    if (!ready) { box.replaceChildren(); return; }
+    if (box.dataset.built === ser.join(',')) return;
+    box.dataset.built = ser.join(',');
+    const big = Math.max(...ser), small = Math.min(...ser);
+    const choices = [`The line for the larger resistor (${fmtR(big)})`, `The line for the smaller resistor (${fmtR(small)})`, 'They have the same slope'];
+    const name = 'steep';
+    const radios = choices.map((c, i) => h('input', { type: 'radio', name, value: i }));
+    const out = h('div', { style: 'margin-top:8px' });
+    const btn = h('button', { class: 'btn btn-small btn-primary', type: 'button' }, 'Check');
+    btn.addEventListener('click', () => {
+      const i = radios.findIndex(r => r.checked);
+      if (i < 0) return;
+      const ok = i === 0;
+      out.replaceChildren(feedback(ok ? 'ok' : 'bad', null, ok
+        ? ` The slope of a V-vs-I line is V ÷ I, which is the resistance. More resistance means more volts are needed for each milliamp, so the line is steeper.`
+        : ` Compare the two lines: for the same current, which one needs more voltage? The slope (V ÷ I) equals the resistance.`));
+      if (ok) { st.steepAnswered = true; drawSteps(); }
+    });
+    box.replaceChildren(h('div', { class: 'predict', style: 'margin-top:12px' }, h('fieldset', {}, h('legend', {}, 'Which line is steeper?'),
+      h('div', { class: 'choices' }, choices.map((c, i) => h('label', { class: 'choice' }, radios[i], h('span', {}, c))))), btn, out));
+  }
+
+  /* ---------- add / clear / csv ---------- */
+  $('#add').addEventListener('click', () => {
+    const p = { R: st.R, V: +op.V.toFixed(2), I: op.I };
+    if (st.points.some(q => q.R === p.R && Math.abs(q.V - p.V) < 1e-6)) { announce('That point is already on the graph. Change the voltage first.'); return; }
+    st.points.push(p);
+    announce(`Added: ${p.V.toFixed(2)} volts, ${(p.I * 1000).toFixed(1)} milliamps, with the ${p.R} ohm resistor.`);
+    renderData(); maybeReveal();
+  });
+  $('#clear').addEventListener('click', () => { st.points = []; renderData(); announce('Data cleared.'); });
+  $('#fit').addEventListener('change', e => { st.fit = e.target.checked; drawGraph(); drawSteps(); });
+  $('#csv').addEventListener('click', () => {
+    const ser = seriesOf();
+    downloadCSV('ohms-law-data.csv', [['Set', 'Resistor (ohm)', 'Voltage (V)', 'Current (mA)', 'V/I (ohm)'],
+      ...st.points.map(p => ['Set ' + (ser.indexOf(p.R) + 1), p.R, p.V.toFixed(2), (p.I * 1000).toFixed(2), p.I > 0 ? Math.round(p.V / p.I) : ''])]);
+  });
+  function renderData() { drawGraph(); drawTable(); drawSteps(); drawSlopeQ(); }
+
+  /* ---------- practice problems ---------- */
+  const PROBLEMS = [
+    { q: 'A 470 Ω resistor is connected to 9.0 V. What is the current?', unit: 'mA', ans: 9 / 470 * 1000, hint: 'I = V ÷ R. Convert amps to milliamps by multiplying by 1000.' },
+    { q: 'A current of 25 mA flows through a 220 Ω resistor. What is the voltage across it?', unit: 'V', ans: 0.025 * 220, hint: 'V = I × R, with I in amps (25 mA = 0.025 A).' },
+    { q: 'A resistor has 6.0 V across it and 12 mA through it. What is its resistance?', unit: 'Ω', ans: 6 / 0.012, hint: 'R = V ÷ I, with I in amps (12 mA = 0.012 A).' }
+  ];
+  PROBLEMS.forEach((p, i) => {
+    const id = 'pr' + i;
+    const input = h('input', { id, type: 'text', inputmode: 'decimal', autocomplete: 'off' });
+    const out = h('div');
+    const check = () => {
+      const v = parseFloat(input.value.replace(',', '.'));
+      if (!isFinite(v)) { out.replaceChildren(feedback('bad', 'Enter a number', ' Type just the number. The unit is already shown.')); return; }
+      const rel = x => Math.abs(v - x) / Math.abs(x);
+      if (rel(p.ans) <= 0.02) out.replaceChildren(feedback('ok', null, ` ${sig(p.ans, 3)} ${p.unit}.`));
+      else if (rel(p.ans * 1000) <= 0.02 || rel(p.ans / 1000) <= 0.02) out.replaceChildren(feedback('bad', 'Off by a factor of 1000', ' Check your units: milliamps vs. amps, or ohms vs. kilohms. ' + p.hint));
+      else out.replaceChildren(feedback('bad', null, ' ' + p.hint));
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+    $('#practice').append(h('div', { class: 'problem' }, h('label', { for: id }, h('strong', {}, (i + 1) + '. '), p.q),
+      h('div', { class: 'ans' }, input, h('span', { style: 'font-weight:700' }, p.unit), h('button', { class: 'btn btn-small', type: 'button', onclick: check }, 'Check')), out));
+  });
+
+  function update() { solve(); drawPSU(); drawCircuit(); drawReadouts(); drawGraph(); }
+  update(); drawTable(); drawSteps();
+
+  about($('#about'), `
+    <p><strong>What it teaches:</strong> With the resistance fixed, current is proportional to voltage (Ohm&rsquo;s law, V = I &times; R). On a voltage-vs-current graph, the slope is the resistance.</p>
+    <p><strong>Time:</strong> about 5 minutes, plus the practice problems.</p>
+    <ul>
+      <li><strong>Axis choice:</strong> current is on the horizontal axis and voltage on the vertical axis, so the slope (V &divide; I) reads directly in ohms. This flips the usual &ldquo;independent variable on x&rdquo; habit on purpose; ask students why it is helpful here.</li>
+      <li>The supply works like a typical bench supply. The VOLTAGE knob sets the output voltage, and the CURRENT knob sets a current limit. When the circuit tries to draw more than the limit, the supply switches to constant-current (CC) mode and lowers its voltage. Points taken in CC mode still lie on the same line.</li>
+      <li>All resistors are rated &frac14; W. The tool warns when P = V &times; I goes over that rating (for example, 12 V across 330 &Omega; is about 0.44 W). This makes a good lead-in to choosing safe component values.</li>
+      <li>The meters here are ideal, so V &divide; I equals the resistor value exactly. With real parts and meters, expect differences of a few percent.</li>
+      <li>Suggested tie-in: repeat the same procedure on a breadboard with a lab supply and a multimeter, then compare the slopes.</li>
+    </ul>`);
+})();
+</script>
+</body>
+</html>
